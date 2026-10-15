@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'app_state.dart';
+import 'builtin_node.dart';
 import 'home.dart';
 import 'providers.dart';
 import 'termux.dart';
@@ -27,6 +28,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _checking = false;
   String? _savingStrategy;
   bool _showKey = false;
+  bool _testingNode = false;
+  String? _nodeResult;
   bool? _termuxInstalled;
   bool? _termuxAllowed;
 
@@ -244,6 +247,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Opens Termux so you can watch; takes a few minutes the first time.',
             style: TextStyle(color: VibeColors.faint, fontSize: 12.5),
           ),
+          const _Header('BUILT-IN SERVER (TEST)'),
+          const Text(
+            'Checks whether this app can run FreeLLMAPI by itself, without Termux: '
+            'Node.js, its database engine and HTTPS.',
+            style: TextStyle(color: VibeColors.muted, fontSize: 13.5, height: 1.35),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _testingNode
+                ? null
+                : () async {
+                    setState(() {
+                      _testingNode = true;
+                      _nodeResult = null;
+                    });
+                    final out = await BuiltinNode.selfTest();
+                    if (mounted) {
+                      setState(() {
+                        _testingNode = false;
+                        _nodeResult = out;
+                      });
+                    }
+                  },
+            icon: _testingNode
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.terminal, size: 18),
+            label: Text(_testingNode ? 'Testing…' : 'Test built-in Node'),
+          ),
+          if (_nodeResult != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: VibeColors.rail, borderRadius: BorderRadius.circular(8)),
+              child: SelectableText(_nodeResult!, style: const TextStyle(fontFamily: 'monospace', fontSize: 12.5)),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => Clipboard.setData(ClipboardData(text: _nodeResult!)),
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copy result'),
+              ),
+            ),
+          ],
           const _Header('KEEP IT RUNNING'),
           const Text(
             'Android can pause Termux with the screen off. Start keeps a wake lock while the server runs. '

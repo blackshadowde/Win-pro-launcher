@@ -6,6 +6,8 @@ import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * Bridge to Termux: runs shell commands there through its RUN_COMMAND service.
@@ -16,6 +18,23 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vibe_ai/node")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "run" -> {
+                        val args = call.argument<List<String>>("args") ?: emptyList()
+                        Thread {
+                            val out = try {
+                                runBundledNode(args)
+                            } catch (e: Exception) {
+                                "Could not start Node: ${e.message}"
+                            }
+                            runOnUiThread { result.success(out) }
+                        }.start()
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vibe_ai/termux")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -44,6 +63,25 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /** Runs the Node.js bundled in this APK (step 1 test of the built-in server). */
+    private fun runBundledNode(args: List<String>): String {
+        val dir = applicationInfo.nativeLibraryDir
+        val node = File(dir, "libvn_node.so")
+        if (!node.exists()) {
+            val found = File(dir).list()?.sorted()?.joinToString() ?: "nothing"
+            return "Node is not bundled in this build.\nNative folder: $dir\nFiles: $found"
+        }
+        val pb = ProcessBuilder(listOf(node.absolutePath) + args).redirectErrorStream(true)
+        val env = pb.environment()
+        env["LD_LIBRARY_PATH"] = dir
+        env["HOME"] = filesDir.absolutePath
+        env["TMPDIR"] = cacheDir.absolutePath
+        val p = pb.start()
+        val text = p.inputStream.bufferedReader().readText()
+        val finished = p.waitFor(60, TimeUnit.SECONDS)
+        return "exit: ${if (finished) p.exitValue().toString() else "timeout"}\n$text"
     }
 
     private fun termuxInstalled(): Boolean =

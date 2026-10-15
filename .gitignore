@@ -20,3 +20,4 @@ android/app/src/main/res/
 android/app/src/debug/
 android/app/src/profile/
 test/
+android/app/src/main/jniLibs/
