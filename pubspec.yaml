@@ -1,0 +1,32 @@
+name: vibe_ai
+description: Discord-style chat app for FreeLLMAPI running in Termux on the same phone.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: any
+  path_provider: any
+  shared_preferences: any
+  url_launcher: any
+  flutter_markdown: any
+
+flutter:
+  uses-material-design: true
+  fonts:
+    # Figtree (SIL Open Font License, assets/fonts/Figtree-OFL.txt), same as Vibe
+    - family: Figtree
+      fonts:
+        - asset: assets/fonts/Figtree-Regular.ttf
+        - asset: assets/fonts/Figtree-Italic.ttf
+          style: italic
+        - asset: assets/fonts/Figtree-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Figtree-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Figtree-Bold.ttf
+          weight: 700

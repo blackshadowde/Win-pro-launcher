@@ -1,8 +1,22 @@
-.gradle/
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
 build/
-app/build/
-local.properties
 .idea/
 *.iml
 .DS_Store
-app/src/main/res/font/
+# Platform files generated in CI by `flutter create` (only our own Android files are committed)
+android/.gradle/
+android/local.properties
+android/gradle/
+android/gradlew
+android/gradlew.bat
+android/app/build.gradle*
+android/build.gradle*
+android/settings.gradle*
+android/gradle.properties
+android/app/src/main/res/
+android/app/src/debug/
+android/app/src/profile/
+test/
