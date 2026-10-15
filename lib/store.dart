@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 
+import 'plugins/tools.dart';
+
 class Msg {
   final String role; // user | assistant
   String text;
@@ -15,10 +17,20 @@ class Msg {
   final int at;
   /// Generated images, saved as files in the app's private storage.
   final List<String> images;
+  /// Tools the AI used while writing this reply (shown as steps above the text).
+  final List<ToolCall> toolCalls;
 
-  Msg({required this.role, required this.text, this.via, this.error = false, int? at, List<String>? images})
-      : at = at ?? DateTime.now().millisecondsSinceEpoch,
-        images = images ?? [];
+  Msg({
+    required this.role,
+    required this.text,
+    this.via,
+    this.error = false,
+    int? at,
+    List<String>? images,
+    List<ToolCall>? toolCalls,
+  })  : at = at ?? DateTime.now().millisecondsSinceEpoch,
+        images = images ?? [],
+        toolCalls = toolCalls ?? [];
 
   Map<String, dynamic> toJson() => {
         'r': role,
@@ -27,6 +39,7 @@ class Msg {
         'e': error,
         'a': at,
         if (images.isNotEmpty) 'i': images,
+        if (toolCalls.isNotEmpty) 'tc': toolCalls.map((c) => c.toJson()).toList(),
       };
 
   factory Msg.fromJson(Map<String, dynamic> j) => Msg(
@@ -36,6 +49,7 @@ class Msg {
         error: j['e'] == true,
         at: j['a'] is int ? j['a'] as int : null,
         images: (j['i'] as List? ?? []).map((e) => e.toString()).toList(),
+        toolCalls: (j['tc'] as List? ?? []).whereType<Map<String, dynamic>>().map(ToolCall.fromJson).toList(),
       );
 }
 
@@ -49,6 +63,8 @@ class Chat {
   String system;
   final List<Msg> messages;
   int updated;
+  /// Plugin ids switched off for this chat.
+  final Set<String> disabledPlugins;
 
   Chat({
     required this.id,
@@ -58,7 +74,9 @@ class Chat {
     this.system = '',
     List<Msg>? messages,
     int? updated,
+    Set<String>? disabledPlugins,
   })  : messages = messages ?? [],
+        disabledPlugins = disabledPlugins ?? {},
         updated = updated ?? DateTime.now().millisecondsSinceEpoch;
 
   String get preview {
@@ -75,6 +93,7 @@ class Chat {
         't': title,
         's': system,
         'u': updated,
+        if (disabledPlugins.isNotEmpty) 'off': disabledPlugins.toList(),
         'msgs': messages.map((m) => m.toJson()).toList(),
       };
 
@@ -85,6 +104,7 @@ class Chat {
         title: (j['t'] ?? '').toString(),
         system: (j['s'] ?? '').toString(),
         updated: j['u'] is int ? j['u'] as int : null,
+        disabledPlugins: (j['off'] as List? ?? []).map((e) => e.toString()).toSet(),
         messages: (j['msgs'] as List? ?? [])
             .whereType<Map<String, dynamic>>()
             .map(Msg.fromJson)

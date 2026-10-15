@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'app_state.dart';
 import 'chat.dart';
+import 'dashboard.dart';
 import 'logs.dart';
 import 'server.dart';
 import 'providers.dart';
@@ -91,9 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsScreen(app: app)));
   }
 
-  Future<void> _openDashboard() async {
-    final ok = await launchUrl(Uri.parse(app.dashboardLink), mode: LaunchMode.externalApplication);
-    if (!ok && mounted) _snack('Could not open the dashboard. Is FreeLLMAPI running?');
+  void _openDashboard() {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => DashboardScreen(app: app)));
   }
 
   Future<void> _startServer() async {

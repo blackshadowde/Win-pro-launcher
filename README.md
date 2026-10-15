@@ -26,6 +26,20 @@ built into the app (or running in Termux), in Vibe's Discord style.
 
 Termux is optional: **Settings → Server → Termux** switches back to running it there.
 
+## Dashboard
+
+The FreeLLMAPI dashboard opens inside the app (Settings → Open dashboard, or the dashboard button on the home screen). If you signed in under Settings, the dashboard uses the same session, so you don't log in twice.
+
+## Plugins
+
+The AI can use tools while it answers. Set them up in Settings → Plugins and integrations:
+
+- **GitHub**: list repos, read files, search code, look at commits, issues and Actions runs. It can also explain why a build failed (failed steps, error annotations, end of the log). With write access it can open issues, comment, and commit a file.
+- **Web page reader**: opens a link and reads the page.
+- **MCP servers**: connect any MCP server that works over HTTP (Streamable HTTP), and its tools appear in chat.
+
+Anything that changes something asks you first (Allow / Deny). Use the puzzle icon in a chat to turn plugins off for that chat. Fusion chats don't use tools. If a model rejects tools, the app retries once without them.
+
 ## Signing (one time)
 
 Add these repo secrets (**Settings → Secrets and variables → Actions → New repository secret**).

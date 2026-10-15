@@ -1,9 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'plugins/github.dart';
+import 'plugins/mcp.dart';
+import 'plugins/tools.dart';
+import 'plugins/web.dart';
 import 'server.dart';
 import 'store.dart';
 
@@ -57,6 +62,18 @@ class AppState extends ChangeNotifier {
     serverMode = _prefs.getString('serverMode') ?? serverMode;
     dashToken = _prefs.getString('dashToken') ?? '';
     dashEmail = _prefs.getString('dashEmail') ?? '';
+    githubOn = _prefs.getBool('githubOn') ?? false;
+    githubToken = _prefs.getString('githubToken') ?? '';
+    webOn = _prefs.getBool('webOn') ?? true;
+    try {
+      final list = jsonDecode(_prefs.getString('mcp_servers') ?? '[]');
+      if (list is List) {
+        mcpServers = list.whereType<Map<String, dynamic>>().map(McpServer.fromJson).toList();
+      }
+    } catch (_) {}
+    for (final m in mcpServers) {
+      if (m.enabled) unawaited(m.connect().then((_) => notifyListeners()));
+    }
     await chats.load();
     unawaited(refresh());
     _poll = Timer.periodic(const Duration(seconds: 6), (_) => refresh());
@@ -125,6 +142,78 @@ class AppState extends ChangeNotifier {
 
   void markStarting() {
     status = ServerStatus.checking;
+    notifyListeners();
+  }
+
+  // ---- Plugins -------------------------------------------------------------------------
+
+  bool githubOn = false;
+  String githubToken = '';
+  bool webOn = true;
+  List<McpServer> mcpServers = [];
+
+  GitHubPlugin? _github;
+  final WebPlugin _web = WebPlugin();
+
+  GitHubPlugin get github {
+    if (_github == null || _github!.token != githubToken) _github = GitHubPlugin(githubToken);
+    return _github!;
+  }
+
+  /// Every plugin, set up or not (for the Plugins screen and per-chat toggles).
+  List<Plugin> get allPlugins => [github, _web, ...mcpServers];
+
+  bool pluginOn(Plugin p) {
+    if (p.id == 'github') return githubOn && githubToken.isNotEmpty;
+    if (p.id == 'web') return webOn;
+    return p is McpServer && p.enabled;
+  }
+
+  /// Plugins that are switched on and ready to offer tools.
+  List<Plugin> get plugins => allPlugins.where((p) => pluginOn(p) && p.ready).toList();
+
+  Future<void> setGithub({bool? enabled, String? token}) async {
+    if (enabled != null) githubOn = enabled;
+    if (token != null) githubToken = token.trim();
+    await _prefs.setBool('githubOn', githubOn);
+    await _prefs.setString('githubToken', githubToken);
+    notifyListeners();
+  }
+
+  Future<void> setWeb(bool value) async {
+    webOn = value;
+    await _prefs.setBool('webOn', value);
+    notifyListeners();
+  }
+
+  Future<void> _saveMcp() async {
+    await _prefs.setString('mcp_servers', jsonEncode(mcpServers.map((m) => m.toJson()).toList()));
+    notifyListeners();
+  }
+
+  Future<void> addMcp(McpServer m) async {
+    mcpServers.add(m);
+    await _saveMcp();
+    await m.connect();
+    notifyListeners();
+  }
+
+  Future<void> removeMcp(McpServer m) async {
+    mcpServers.remove(m);
+    await _saveMcp();
+  }
+
+  Future<void> setMcpOn(McpServer m, bool value) async {
+    m.enabled = value;
+    await _saveMcp();
+    if (value && !m.connected) {
+      await m.connect();
+      notifyListeners();
+    }
+  }
+
+  Future<void> reconnectMcp(McpServer m) async {
+    await m.connect();
     notifyListeners();
   }
 

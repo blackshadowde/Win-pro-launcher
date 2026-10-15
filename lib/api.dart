@@ -47,11 +47,21 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// A piece of a streamed reply: text, or which provider/model answered.
+/// A piece of a streamed reply: text, which provider/model answered, or part of a tool call.
 class ChatChunk {
   final String? text;
   final String? via;
-  const ChatChunk({this.text, this.via});
+  final ToolDelta? tool;
+  const ChatChunk({this.text, this.via, this.tool});
+}
+
+/// A streamed fragment of a tool call. Fragments with the same [index] belong together.
+class ToolDelta {
+  final int index;
+  final String? id;
+  final String? name;
+  final String arguments;
+  const ToolDelta(this.index, this.id, this.name, this.arguments);
 }
 
 /// Client for FreeLLMAPI's OpenAI-compatible API on this phone.
@@ -81,11 +91,18 @@ class LlmApi {
   /// Streams a chat completion. Cancelling the subscription stops the request.
   Stream<ChatChunk> chat({
     required String model,
-    required List<Map<String, String>> messages,
+    required List<Map<String, dynamic>> messages,
+    List<Map<String, dynamic>>? tools,
   }) async* {
     final req = http.Request('POST', Uri.parse('$_root/v1/chat/completions'));
     req.headers.addAll({..._headers, 'Accept': 'text/event-stream'});
-    req.body = jsonEncode({'model': model, 'messages': messages, 'stream': true});
+    req.body = jsonEncode({
+      'model': model,
+      'messages': messages,
+      'stream': true,
+      if (tools != null && tools.isNotEmpty) 'tools': tools,
+      if (tools != null && tools.isNotEmpty) 'tool_choice': 'auto',
+    });
     final client = http.Client();
     try {
       final res = await client.send(req).timeout(const Duration(seconds: 90));
@@ -122,6 +139,23 @@ class LlmApi {
           final delta = first is Map ? (first['delta'] ?? first['message']) : null;
           final content = delta is Map ? delta['content'] : null;
           if (content is String && content.isNotEmpty) yield ChatChunk(text: content);
+          final calls = delta is Map ? delta['tool_calls'] : null;
+          if (calls is List) {
+            for (var i = 0; i < calls.length; i++) {
+              final c = calls[i];
+              if (c is! Map) continue;
+              final f = c['function'];
+              final args = f is Map ? f['arguments'] : null;
+              yield ChatChunk(
+                tool: ToolDelta(
+                  c['index'] is int ? c['index'] as int : i,
+                  c['id'] as String?,
+                  f is Map ? f['name'] as String? : null,
+                  args is String ? args : (args == null ? '' : jsonEncode(args)),
+                ),
+              );
+            }
+          }
         }
       }
     } finally {

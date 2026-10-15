@@ -16,6 +16,7 @@ dependencies:
   flutter_markdown: any
   speech_to_text: any
   package_info_plus: any
+  webview_flutter: any
 
 flutter:
   uses-material-design: true

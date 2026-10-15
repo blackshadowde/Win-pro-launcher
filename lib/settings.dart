@@ -4,7 +4,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'app_state.dart';
 import 'builtin_node.dart';
+import 'dashboard.dart';
 import 'logs.dart';
+import 'plugins_screen.dart';
 import 'server.dart';
 import 'updates.dart';
 import 'home.dart';
@@ -213,6 +215,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(_updateText!, style: const TextStyle(color: VibeColors.faint, fontSize: 13)),
             ),
+          const _Header('PLUGINS'),
+          ListenableBuilder(
+            listenable: widget.app,
+            builder: (context, _) {
+              final on = widget.app.plugins.map((p) => p.name).toList();
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.extension_outlined, color: VibeColors.text),
+                title: const Text('Plugins and integrations', style: TextStyle(color: VibeColors.text)),
+                subtitle: Text(on.isEmpty ? 'GitHub, web reader, MCP servers' : 'On: ${on.join(', ')}',
+                    style: const TextStyle(color: VibeColors.faint, fontSize: 12.5)),
+                trailing: const Icon(Icons.chevron_right, color: VibeColors.faint),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => PluginsScreen(app: widget.app))),
+              );
+            },
+          ),
           const _Header('SERVER'),
           for (final (mode, label, hint) in const [
             ('builtin', 'Built into this app', 'FreeLLMAPI runs inside Vibe AI. No Termux needed.'),
@@ -273,10 +292,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
-              onPressed: () => launchUrl(
-                Uri.parse(widget.app.builtin ? _base.text.trim() : _dash.text.trim()),
-                mode: LaunchMode.externalApplication,
-              ),
+              onPressed: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => DashboardScreen(app: widget.app))),
               icon: const Icon(Icons.open_in_new, size: 18),
               label: const Text('Open dashboard (add provider keys, copy the unified key)'),
             ),
