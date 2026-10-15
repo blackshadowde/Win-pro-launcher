@@ -8,8 +8,9 @@ import androidx.compose.runtime.setValue
 
 enum class Phase { Hidden, In, Out }
 
-/** Which lifecycle moment starts the swing-in. Phase 0 tests all three. */
+/** Which moment starts the swing-in after returning home. */
 enum class Trigger(val label: String) {
+    OnEnterAnim("after system animation"),
     OnStart("onStart"),
     OnResume("onResume"),
     OnFocus("window focus"),
@@ -17,13 +18,18 @@ enum class Trigger(val label: String) {
 
 class StartState {
     var phase by mutableStateOf(Phase.Hidden)
-    /** Bumped every time Start is left; tiles hide until they have reset for the new epoch. */
+    /** Bumped every time Start is left; tiles stay invisible until they reset for the new epoch. */
     var epoch by mutableIntStateOf(0)
     var launchingKey by mutableStateOf<String?>(null)
-    var scrollTopRequests by mutableIntStateOf(0)
-    var trigger by mutableStateOf(Trigger.OnResume)
     var navMode by mutableStateOf("unknown")
     var blockedUntil = 0L
+
+    /** Home pressed while already on Start: animate to the top. */
+    var homeRequests by mutableIntStateOf(0)
+    /** Returned home from an app: jump to the top of Start. */
+    var snapHomeRequests by mutableIntStateOf(0)
+    /** Bumped when apps are installed, removed or updated. */
+    var appsVersion by mutableIntStateOf(0)
 
     fun leave() {
         epoch++
