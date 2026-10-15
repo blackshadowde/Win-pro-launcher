@@ -20,7 +20,7 @@ data class Cell(val col: Int, val row: Int)
 
 object Grid {
     /**
-     * Places tiles in order, first fit, never earlier than the previous tile's row.
+     * Places tiles in order, first fit from the top, so gaps get filled.
      * Medium and wide tiles snap to even rows and columns (2x2 blocks), like WP;
      * small tiles fill the quarters of a block.
      */
@@ -36,29 +36,33 @@ object Grid {
             return true
         }
 
+        // Walk 2x2 blocks in reading order. Small tiles fill a block's quarters
+        // (top-left, top-right, bottom-left, bottom-right), so 4 smalls make one square.
+        val quarters = listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1)
         val out = ArrayList<Cell>(pins.size)
-        var cursor = 0
         for (pin in pins) {
             val s = pin.size
-            val step = if (s == TileSize.Small) 1 else 2
             var placed: Cell? = null
-            var r = cursor
+            var r = 0 // first fit from the top, so later tiles fill earlier gaps
             while (placed == null) {
-                if (s == TileSize.Small || r % 2 == 0) {
-                    var c = 0
-                    while (c + s.w <= columns) {
-                        if (fits(c, r, s)) {
-                            placed = Cell(c, r)
-                            break
+                var c = 0
+                while (placed == null && c + minOf(s.w, 2) <= columns) {
+                    if (s == TileSize.Small) {
+                        for ((dc, dr) in quarters) {
+                            if (fits(c + dc, r + dr, s)) {
+                                placed = Cell(c + dc, r + dr)
+                                break
+                            }
                         }
-                        c += step
+                    } else if (fits(c, r, s)) {
+                        placed = Cell(c, r)
                     }
+                    c += 2
                 }
-                if (placed == null) r++
+                if (placed == null) r += 2
             }
             for (dr in 0 until s.h) for (dc in 0 until s.w) occ[placed.row + dr][placed.col + dc] = true
             out += placed
-            cursor = placed.row
         }
         return out
     }

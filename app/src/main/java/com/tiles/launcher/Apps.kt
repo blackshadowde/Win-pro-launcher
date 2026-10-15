@@ -94,7 +94,7 @@ fun defaultPins(context: Context, apps: List<AppEntry>): List<Pin> {
     val sizes = listOf(
         TileSize.Medium, TileSize.Medium,
         TileSize.Small, TileSize.Small, TileSize.Small, TileSize.Small,
-        TileSize.Wide, TileSize.Medium,
+        TileSize.Medium, TileSize.Wide,
     )
     return keys.take(8).mapIndexed { i, k -> Pin(k, sizes.getOrElse(i) { TileSize.Medium }) }
 }
