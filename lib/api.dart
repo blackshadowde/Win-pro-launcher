@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -22,6 +23,8 @@ class ModelInfo {
 
   bool get isRouter =>
       provider == 'freellmapi' && (id == 'auto' || id.startsWith('auto:') || id == 'fusion');
+
+  bool get isAutoChain => provider == 'freellmapi' && (id == 'auto' || id.startsWith('auto:'));
 
   factory ModelInfo.fromJson(Map<String, dynamic> j) {
     final a = j['available'];
@@ -138,5 +141,153 @@ class LlmApi {
     } catch (_) {}
     if (status == 401) return 'The API key was not accepted.';
     return 'Server answered $status.';
+  }
+}
+
+/// One generated image: raw bytes plus which provider/model made it.
+class GeneratedImages {
+  final List<Uint8List> images;
+  final String? via;
+  const GeneratedImages(this.images, this.via);
+}
+
+extension ImageGeneration on LlmApi {
+  /// POST /v1/images/generations with the router's default image model.
+  Future<GeneratedImages> generateImage(String prompt) async {
+    final res = await http
+        .post(
+          Uri.parse('$_root/v1/images/generations'),
+          headers: _headers,
+          body: jsonEncode({'prompt': prompt, 'n': 1}),
+        )
+        .timeout(const Duration(seconds: 120));
+    if (res.statusCode != 200) {
+      throw ApiException(res.statusCode, LlmApi._errorText(res.body, res.statusCode));
+    }
+    final j = jsonDecode(utf8.decode(res.bodyBytes));
+    final out = <Uint8List>[];
+    final data = j is Map ? j['data'] : null;
+    if (data is List) {
+      for (final item in data) {
+        if (item is! Map) continue;
+        final b64 = item['b64_json'];
+        final url = item['url'];
+        if (b64 is String && b64.isNotEmpty) {
+          out.add(base64Decode(b64));
+        } else if (url is String && url.startsWith('data:')) {
+          out.add(base64Decode(url.substring(url.indexOf(',') + 1)));
+        } else if (url is String && url.isNotEmpty) {
+          final img = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 60));
+          if (img.statusCode == 200) out.add(img.bodyBytes);
+        }
+      }
+    }
+    if (out.isEmpty) throw ApiException(502, 'No image came back. Is an image provider key added?');
+    final provider = j is Map ? j['provider'] : null;
+    final model = j is Map ? j['model'] : null;
+    final via = provider is String && model is String ? '$provider/$model' : (model is String ? model : null);
+    return GeneratedImages(out, via);
+  }
+}
+
+/// Health of one provider key, from the dashboard's /api/keys.
+class KeyHealth {
+  final String provider;
+  final String status; // healthy | rate_limited | invalid | error | unknown
+  final bool enabled;
+  final String? error;
+  const KeyHealth(this.provider, this.status, this.enabled, this.error);
+}
+
+/// The dashboard's admin API (/api/*), signed in with a session token.
+class DashboardApi {
+  final String baseUrl;
+  final String token;
+  DashboardApi(this.baseUrl, this.token);
+
+  String get _root => baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+  /// Signs in with the dashboard email and password; returns the session token.
+  static Future<String> login(String baseUrl, String email, String password) async {
+    final root = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+    final res = await http
+        .post(
+          Uri.parse('$root/api/auth/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email.trim(), 'password': password}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) throw ApiException(res.statusCode, LlmApi._errorText(res.body, res.statusCode));
+    final j = jsonDecode(res.body);
+    final token = j is Map ? j['token'] : null;
+    if (token is! String || token.isEmpty) throw ApiException(500, 'Sign-in gave no token.');
+    return token;
+  }
+
+  Future<dynamic> _get(String path) async {
+    final res = await http.get(Uri.parse('$_root$path'), headers: _headers).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) throw ApiException(res.statusCode, LlmApi._errorText(res.body, res.statusCode));
+    return jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  Future<dynamic> _send(String method, String path, [Object? body]) async {
+    final req = http.Request(method, Uri.parse('$_root$path'));
+    req.headers.addAll(_headers);
+    if (body != null) req.body = jsonEncode(body);
+    final streamed = await req.send().timeout(const Duration(seconds: 120));
+    final res = await http.Response.fromStream(streamed);
+    if (res.statusCode != 200) throw ApiException(res.statusCode, LlmApi._errorText(res.body, res.statusCode));
+    return res.body.isEmpty ? null : jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  Future<String?> unifiedKey() async {
+    final j = await _get('/api/settings/api-key');
+    final k = j is Map ? j['apiKey'] : null;
+    return k is String ? k : null;
+  }
+
+  /// Current routing settings (strategy, peak hours, ...), as the server returns them.
+  Future<Map<String, dynamic>> routing() async {
+    final j = await _get('/api/fallback/routing');
+    return j is Map<String, dynamic> ? j : <String, dynamic>{};
+  }
+
+  /// Changes only the strategy; sends the other routing settings back unchanged.
+  Future<void> setStrategy(String strategy, Map<String, dynamic> current) async {
+    final body = <String, dynamic>{'strategy': strategy};
+    for (final k in [
+      'exploreEnabled',
+      'keySelectionStrategy',
+      'cooldownCeilingMs',
+      'peakHoursAdjust',
+      'peakStartHour',
+      'peakEndHour',
+      'peakTimezone',
+    ]) {
+      if (current[k] != null) body[k] = current[k];
+    }
+    await _send('PUT', '/api/fallback/routing', body);
+  }
+
+  Future<List<KeyHealth>> keys() async {
+    final j = await _get('/api/keys');
+    if (j is! List) return const [];
+    return j.whereType<Map>().map((k) {
+      return KeyHealth(
+        (k['platform'] ?? 'unknown').toString(),
+        (k['status'] ?? 'unknown').toString(),
+        k['enabled'] != false,
+        k['lastHealthError']?.toString(),
+      );
+    }).toList();
+  }
+
+  Future<void> checkAllKeys() async {
+    await _send('POST', '/api/health/check-all');
   }
 }

@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Lets the app start/stop FreeLLMAPI inside Termux (granted by you at runtime). -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+    <!-- Voice input in chats (Android's built-in speech recognition). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:name="${applicationName}"
@@ -36,6 +38,9 @@
 
     <queries>
         <package android:name="com.termux" />
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />

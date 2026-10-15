@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'app_state.dart';
 import 'home.dart';
+import 'providers.dart';
 import 'termux.dart';
 import 'theme.dart';
 
@@ -20,6 +21,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final _dash = TextEditingController(text: widget.app.dashboardUrl);
   late final _key = TextEditingController(text: widget.app.apiKey);
   late final _folder = TextEditingController(text: widget.app.folder);
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _signingIn = false;
+  bool _checking = false;
+  String? _savingStrategy;
   bool _showKey = false;
   bool? _termuxInstalled;
   bool? _termuxAllowed;
@@ -47,6 +53,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _dash.dispose();
     _key.dispose();
     _folder.dispose();
+    _email.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -79,6 +87,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await Termux.run(Termux.installScript(widget.app.folder), background: false);
     } on PlatformException catch (e) {
       if (mounted) showAllowExternalAppsDialog(context, e.message);
+    }
+  }
+
+  Future<void> _signIn() async {
+    if (_email.text.trim().isEmpty || _password.text.isEmpty) {
+      _snack('Enter the dashboard email and password.');
+      return;
+    }
+    // Save the address first, so sign-in goes to the right server.
+    await widget.app.saveSettings(
+      baseUrl: _base.text,
+      dashboardUrl: _dash.text,
+      apiKey: _key.text,
+      folder: _folder.text,
+    );
+    setState(() => _signingIn = true);
+    try {
+      await widget.app.signIn(_email.text, _password.text);
+      _password.clear();
+      _key.text = widget.app.apiKey;
+      _snack('Signed in. The API key was filled in for you.');
+    } catch (e) {
+      _snack('Sign-in failed: $e');
+    } finally {
+      if (mounted) setState(() => _signingIn = false);
+    }
+  }
+
+  Future<void> _setStrategy(String value) async {
+    setState(() => _savingStrategy = value);
+    try {
+      await widget.app.setStrategy(value);
+    } catch (e) {
+      _snack('Could not change routing: $e');
+    } finally {
+      if (mounted) setState(() => _savingStrategy = null);
+    }
+  }
+
+  Future<void> _checkKeys() async {
+    setState(() => _checking = true);
+    try {
+      await widget.app.checkAllKeys();
+      _snack('Keys checked.');
+    } catch (e) {
+      _snack('Check failed: $e');
+    } finally {
+      if (mounted) setState(() => _checking = false);
     }
   }
 
@@ -119,6 +175,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: const Text('Open dashboard (add provider keys, copy the unified key)'),
             ),
           ),
+          const _Header('DASHBOARD'),
+          ListenableBuilder(listenable: widget.app, builder: (context, _) => _dashboardSection()),
           const _Header('TERMUX'),
           _StatusLine(
             ok: _termuxInstalled,
@@ -194,6 +252,160 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+extension _Dashboard on _SettingsScreenState {
+  Widget _dashboardSection() {
+    final app = widget.app;
+    if (!app.signedIn) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Sign in with your FreeLLMAPI dashboard account to change routing, check keys, '
+            'and fill in the API key automatically. Only a 30-day session is saved, not your password.',
+            style: TextStyle(color: VibeColors.muted, fontSize: 13.5, height: 1.35),
+          ),
+          const SizedBox(height: 10),
+          _Field(label: 'Dashboard email', controller: _email, hint: 'you@example.com'),
+          _Field(label: 'Dashboard password', controller: _password, hint: '', obscure: true),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: VibeColors.blurple,
+              minimumSize: const Size.fromHeight(44),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            ),
+            onPressed: _signingIn ? null : _signIn,
+            child: Text(_signingIn ? 'Signing in…' : 'Sign in'),
+          ),
+        ],
+      );
+    }
+
+    const strategies = [
+      ('balanced', 'Balanced', 'Reliability first, then speed and intelligence'),
+      ('smartest', 'Smartest', 'Most capable model that still works'),
+      ('fastest', 'Fastest', 'Quickest model that still works'),
+      ('reliable', 'Most reliable', 'Highest success rate above all'),
+      ('priority', 'Manual order', 'The order you set in the dashboard'),
+    ];
+    final current = app.strategy;
+    final providers = app.keys.map((k) => k.provider).toSet().toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('Signed in as ${app.dashEmail.isEmpty ? 'dashboard' : app.dashEmail}',
+                  style: const TextStyle(color: VibeColors.muted)),
+            ),
+            TextButton(onPressed: app.signOut, child: const Text('Sign out')),
+          ],
+        ),
+        if (app.dashError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(app.dashError!, style: const TextStyle(color: VibeColors.danger, fontSize: 13)),
+          ),
+        const SizedBox(height: 6),
+        const Text('Routing for Auto', style: TextStyle(color: VibeColors.text, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        for (final (id, label, hint) in strategies)
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _savingStrategy != null || id == current ? null : () => _setStrategy(id),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    id == current ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: id == current ? VibeColors.blurple : VibeColors.faint,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(label, style: const TextStyle(color: VibeColors.text, fontSize: 15)),
+                        Text(hint, style: const TextStyle(color: VibeColors.faint, fontSize: 12.5)),
+                      ],
+                    ),
+                  ),
+                  if (_savingStrategy == id)
+                    const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Provider keys', style: TextStyle(color: VibeColors.text, fontWeight: FontWeight.w700)),
+            ),
+            TextButton.icon(
+              onPressed: _checking ? null : _checkKeys,
+              icon: _checking
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.health_and_safety_outlined, size: 18),
+              label: Text(_checking ? 'Checking…' : 'Check all keys'),
+            ),
+          ],
+        ),
+        if (providers.isEmpty)
+          const Text('No provider keys yet. Add them in the dashboard.',
+              style: TextStyle(color: VibeColors.faint, fontSize: 13)),
+        for (final p in providers)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: healthColor(app.providerHealth(p)) ?? VibeColors.outline,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(lookFor(p).name, style: const TextStyle(color: VibeColors.text)),
+                      if (app.providerHealth(p) != 'healthy' && app.providerError(p) != null)
+                        Text(app.providerError(p)!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: VibeColors.faint, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                Text(
+                  switch (app.providerHealth(p)) {
+                    'healthy' => 'OK',
+                    'rate_limited' => 'Rate limited',
+                    'problem' => 'Problem',
+                    _ => 'Unchecked',
+                  },
+                  style: const TextStyle(color: VibeColors.faint, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

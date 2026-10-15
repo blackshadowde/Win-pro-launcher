@@ -8,7 +8,13 @@ running in Termux on the same phone, in Vibe's Discord style.
 - **Middle pane**: that provider's chats, *New chat*, and its models (green = ready).
 - **Chat**: slides over Vibe-style and drags back from anywhere. Replies stream in and
   show which provider and model actually answered.
+- **Fusion**: second rail entry. Several models answer at once, one blended answer comes back.
+- **Key health**: a dot on each provider avatar (green OK, yellow rate limited, red problem).
+- **Chat extras**: per-chat instructions (system prompt), image creation (image button),
+  voice input (mic, uses Android's speech recognition).
 - **User bar**: server status, start/stop FreeLLMAPI in Termux, settings.
+- **Settings → Dashboard**: sign in once (only a 30-day session is kept, not the password);
+  the unified API key fills itself in, pick the routing strategy for Auto, check all keys.
 
 ## First-time setup
 
@@ -18,8 +24,8 @@ running in Termux on the same phone, in Vibe's Discord style.
    mkdir -p ~/.termux && echo "allow-external-apps=true" >> ~/.termux/termux.properties && termux-reload-settings
    ```
 3. In Vibe AI: **Settings → Install FreeLLMAPI in Termux** (allow the permission it asks for).
-4. Tap **Start** in the user bar, open the dashboard (**+** in the rail), add your provider
-   keys, copy the **unified API key** and paste it in **Settings**.
+4. Tap **Start** in the user bar, open the dashboard (**+** in the rail) and add your provider keys.
+5. In **Settings → Dashboard**, sign in with the dashboard account. The API key fills itself in.
 
 ## Build
 

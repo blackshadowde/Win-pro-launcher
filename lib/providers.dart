@@ -13,6 +13,8 @@ class ProviderLook {
 
 const _names = {
   'auto': 'Auto',
+  'fusion': 'Fusion',
+  'freellmapi': 'Auto',
   'google': 'Gemini',
   'gemini': 'Gemini',
   'groq': 'Groq',
@@ -82,25 +84,33 @@ class ProviderAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final look = lookFor(id);
     final isAuto = id == 'auto';
+    final isFusion = id == 'fusion';
+    final special = isAuto || isFusion;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: isAuto ? null : (selected ? look.color : VibeColors.highest),
+        color: special ? null : (selected ? look.color : VibeColors.highest),
         gradient: isAuto
             ? const LinearGradient(
                 colors: [VibeColors.blurple, Color(0xFFEB459E)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               )
-            : null,
+            : isFusion
+                ? const LinearGradient(
+                    colors: [Color(0xFF1ABC9C), VibeColors.blurple],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
         borderRadius: BorderRadius.circular(selected ? size * 0.32 : size / 2),
       ),
       alignment: Alignment.center,
-      child: isAuto
-          ? Icon(Icons.auto_awesome, color: Colors.white, size: size * 0.46)
+      child: special
+          ? Icon(isAuto ? Icons.auto_awesome : Icons.hub_outlined, color: Colors.white, size: size * 0.46)
           : Text(
               look.initials,
               style: TextStyle(
@@ -112,3 +122,11 @@ class ProviderAvatar extends StatelessWidget {
     );
   }
 }
+
+/// Colour for a provider's key health dot. Null = no dot.
+Color? healthColor(String? health) => switch (health) {
+      'healthy' => VibeColors.online,
+      'rate_limited' => VibeColors.idle,
+      'problem' => VibeColors.danger,
+      _ => null,
+    };

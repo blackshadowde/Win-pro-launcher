@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import 'api.dart';
 import 'app_state.dart';
@@ -24,33 +26,56 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  final _speech = SpeechToText();
   StreamSubscription<ChatChunk>? _sub;
   Msg? _streaming;
+  bool _imageMode = false;
+  bool _imageBusy = false;
+  int _imageRun = 0; // bumps to ignore a cancelled image request
+  bool _listening = false;
 
   Chat get chat => widget.chat;
   AppState get app => widget.app;
-  bool get busy => _sub != null;
+  bool get busy => _sub != null || _imageBusy;
 
   @override
   void dispose() {
     _sub?.cancel();
+    _speech.stop();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  // ---- Sending ------------------------------------------------------------------------------
+
+  void _submit() {
+    if (_imageMode) {
+      _sendImage();
+    } else {
+      _send();
+    }
+  }
+
+  void _addUserMessage(String text) {
+    chat.messages.add(Msg(role: 'user', text: text));
+    if (chat.title.isEmpty) chat.title = text.length > 48 ? '${text.substring(0, 48)}…' : text;
   }
 
   void _send() {
     final text = _input.text.trim();
     if (text.isEmpty || busy) return;
     VibeHaptics.light();
+    _stopListening();
     _input.clear();
 
-    chat.messages.add(Msg(role: 'user', text: text));
-    if (chat.title.isEmpty) chat.title = text.length > 48 ? '${text.substring(0, 48)}…' : text;
-    final history = chat.messages
-        .where((m) => !m.error && m.text.trim().isNotEmpty)
-        .map((m) => {'role': m.role, 'content': m.text})
-        .toList();
+    _addUserMessage(text);
+    final history = <Map<String, String>>[
+      if (chat.system.trim().isNotEmpty) {'role': 'system', 'content': chat.system.trim()},
+      ...chat.messages
+          .where((m) => !m.error && m.text.trim().isNotEmpty)
+          .map((m) => {'role': m.role, 'content': m.text}),
+    ];
 
     final reply = Msg(role: 'assistant', text: '');
     chat.messages.add(reply);
@@ -74,14 +99,48 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Future<void> _sendImage() async {
+    final prompt = _input.text.trim();
+    if (prompt.isEmpty || busy) return;
+    VibeHaptics.light();
+    _stopListening();
+    _input.clear();
+
+    _addUserMessage(prompt);
+    final reply = Msg(role: 'assistant', text: '');
+    chat.messages.add(reply);
+    app.chats.changed();
+    final run = ++_imageRun;
+    setState(() {
+      _imageBusy = true;
+      _streaming = reply;
+    });
+    try {
+      final result = await app.api.generateImage(prompt);
+      if (run != _imageRun) return;
+      for (final bytes in result.images) {
+        reply.images.add(await app.chats.saveImage(bytes));
+      }
+      reply.via = result.via;
+    } catch (e) {
+      if (run != _imageRun) return;
+      reply.error = true;
+      reply.text = e.toString();
+    }
+    if (run != _imageRun) return;
+    _imageBusy = false;
+    _finish();
+  }
+
   void _finish() {
     final r = _streaming;
-    if (r != null && r.text.trim().isEmpty && !r.error) {
+    if (r != null && r.text.trim().isEmpty && r.images.isEmpty && !r.error) {
       r.error = true;
       r.text = 'No reply. The model may be busy; try again or pick another model.';
     }
     _sub = null;
     _streaming = null;
+    _imageBusy = false;
     chat.updated = DateTime.now().millisecondsSinceEpoch;
     app.chats.changed();
     if (mounted) setState(() {});
@@ -89,8 +148,54 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _stop() {
     _sub?.cancel();
+    _imageRun++;
     _finish();
   }
+
+  // ---- Voice input (Android's built-in speech recognition) --------------------------------
+
+  Future<void> _toggleMic() async {
+    if (_listening) {
+      _stopListening();
+      return;
+    }
+    final ok = await _speech.initialize(
+      onStatus: (s) {
+        if ((s == 'done' || s == 'notListening') && mounted) setState(() => _listening = false);
+      },
+      onError: (_) {
+        if (mounted) setState(() => _listening = false);
+      },
+    );
+    if (!ok) {
+      _snack('Voice input is not available on this phone.');
+      return;
+    }
+    VibeHaptics.light();
+    setState(() => _listening = true);
+    await _speech.listen(
+      onResult: (r) {
+        _input.text = r.recognizedWords;
+        _input.selection = TextSelection.collapsed(offset: _input.text.length);
+      },
+    );
+  }
+
+  void _stopListening() {
+    if (_listening) {
+      _speech.stop();
+      setState(() => _listening = false);
+    }
+  }
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text), behavior: SnackBarBehavior.floating));
+  }
+
+  // ---- UI -----------------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -115,7 +220,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: VibeColors.text),
                   ),
                   Text(
-                    app.modelName(chat.model),
+                    app.modelName(chat.model) + (chat.system.trim().isNotEmpty ? ' · custom instructions' : ''),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, color: VibeColors.faint),
@@ -127,10 +232,16 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: 'Change model',
-            icon: const Icon(Icons.swap_horiz, color: VibeColors.muted),
-            onPressed: _pickModel,
+            tooltip: 'Instructions',
+            icon: Icon(Icons.tune, color: chat.system.trim().isNotEmpty ? VibeColors.blurple : VibeColors.muted),
+            onPressed: _editSystem,
           ),
+          if (chat.provider != 'fusion')
+            IconButton(
+              tooltip: 'Change model',
+              icon: const Icon(Icons.swap_horiz, color: VibeColors.muted),
+              onPressed: _pickModel,
+            ),
         ],
       ),
       body: Column(
@@ -151,17 +262,68 @@ class _ChatScreenState extends State<ChatScreen> {
                         msg: m,
                         header: header,
                         provider: chat.provider,
-                        typing: identical(m, _streaming) && m.text.isEmpty,
+                        typing: identical(m, _streaming) && m.text.isEmpty && m.images.isEmpty,
+                        imageMode: identical(m, _streaming) && _imageBusy,
                       );
                     },
                   ),
           ),
           _Composer(
             controller: _input,
-            hint: 'Message ${look.name}',
+            hint: _imageMode ? 'Describe an image…' : 'Message ${look.name}',
             busy: busy,
-            onSend: _send,
+            imageMode: _imageMode,
+            listening: _listening,
+            onSend: _submit,
             onStop: _stop,
+            onMic: _toggleMic,
+            onToggleImage: () {
+              VibeHaptics.selection();
+              setState(() => _imageMode = !_imageMode);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editSystem() {
+    final ctrl = TextEditingController(text: chat.system);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: VibeColors.card,
+        title: const Text('Instructions for this chat'),
+        content: TextField(
+          controller: ctrl,
+          minLines: 3,
+          maxLines: 8,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Reply briefly, in simple English.',
+            filled: true,
+            fillColor: VibeColors.rail,
+            border: OutlineInputBorder(borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          if (chat.system.isNotEmpty)
+            TextButton(
+              onPressed: () {
+                setState(() => chat.system = '');
+                app.chats.changed();
+                Navigator.pop(ctx);
+              },
+              child: const Text('Clear'),
+            ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              setState(() => chat.system = ctrl.text.trim());
+              app.chats.changed();
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -224,10 +386,18 @@ class _EmptyChat extends StatelessWidget {
           Text(name, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: VibeColors.text)),
           const SizedBox(height: 6),
           Text(
-            provider == 'auto'
-                ? 'Every message goes to the best free model available right now.'
-                : 'This is the beginning of your chat with $name.',
+            switch (provider) {
+              'auto' => 'Every message goes to the best free model available right now.',
+              'fusion' => 'Several models answer each message at once, then one blended answer comes back. '
+                  'Slower, but often better.',
+              _ => 'This is the beginning of your chat with $name.',
+            },
             style: const TextStyle(color: VibeColors.muted, fontSize: 15),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Tap the image button to create pictures, or the mic to talk.',
+            style: TextStyle(color: VibeColors.faint, fontSize: 13),
           ),
         ],
       ),
@@ -240,7 +410,14 @@ class _MessageRow extends StatelessWidget {
   final bool header;
   final String provider;
   final bool typing;
-  const _MessageRow({required this.msg, required this.header, required this.provider, required this.typing});
+  final bool imageMode;
+  const _MessageRow({
+    required this.msg,
+    required this.header,
+    required this.provider,
+    required this.typing,
+    required this.imageMode,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -251,15 +428,42 @@ class _MessageRow extends StatelessWidget {
     final name = mine ? 'You' : lookFor(answeredBy).name;
     final time = TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(msg.at)).format(context);
 
-    final body = typing
-        ? const Text('typing…', style: TextStyle(color: VibeColors.faint, fontStyle: FontStyle.italic))
-        : msg.error
-            ? Text(msg.text, style: const TextStyle(color: VibeColors.danger, fontSize: 14.5))
-            : MarkdownBody(
-                data: msg.text,
-                selectable: true,
-                styleSheet: _markdownStyle(context),
-              );
+    final Widget body;
+    if (typing) {
+      body = Text(
+        imageMode ? 'drawing…' : 'typing…',
+        style: const TextStyle(color: VibeColors.faint, fontStyle: FontStyle.italic),
+      );
+    } else if (msg.error) {
+      body = Text(msg.text, style: const TextStyle(color: VibeColors.danger, fontSize: 14.5));
+    } else {
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (msg.text.isNotEmpty)
+            MarkdownBody(data: msg.text, selectable: true, styleSheet: _markdownStyle(context)),
+          for (final path in msg.images)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: GestureDetector(
+                onTap: () => _viewImage(context, path),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300, maxHeight: 300),
+                    child: Image.file(
+                      File(path),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Text('Image missing',
+                          style: TextStyle(color: VibeColors.faint, fontStyle: FontStyle.italic)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
 
     return GestureDetector(
       onLongPress: msg.text.isEmpty
@@ -328,6 +532,20 @@ class _MessageRow extends StatelessWidget {
     );
   }
 
+  static void _viewImage(BuildContext context, String path) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => GestureDetector(
+        onTap: () => Navigator.pop(ctx),
+        child: InteractiveViewer(
+          maxScale: 5,
+          child: Center(child: Image.file(File(path))),
+        ),
+      ),
+    );
+  }
+
   static MarkdownStyleSheet _markdownStyle(BuildContext context) {
     const base = TextStyle(color: VibeColors.text, fontSize: 15.5, height: 1.38);
     return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
@@ -363,14 +581,22 @@ class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final bool busy;
+  final bool imageMode;
+  final bool listening;
   final VoidCallback onSend;
   final VoidCallback onStop;
+  final VoidCallback onMic;
+  final VoidCallback onToggleImage;
   const _Composer({
     required this.controller,
     required this.hint,
     required this.busy,
+    required this.imageMode,
+    required this.listening,
     required this.onSend,
     required this.onStop,
+    required this.onMic,
+    required this.onToggleImage,
   });
 
   @override
@@ -378,14 +604,35 @@ class _Composer extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+        padding: const EdgeInsets.fromLTRB(8, 6, 12, 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            SizedBox(
+              width: 44,
+              height: 44,
+              child: IconButton(
+                tooltip: imageMode ? 'Back to chat' : 'Create an image',
+                onPressed: busy ? null : onToggleImage,
+                style: IconButton.styleFrom(
+                  backgroundColor: imageMode ? VibeColors.blurple : VibeColors.high,
+                ),
+                icon: Icon(
+                  imageMode ? Icons.image : Icons.image_outlined,
+                  color: imageMode ? Colors.white : VibeColors.muted,
+                  size: 22,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(color: VibeColors.high, borderRadius: BorderRadius.circular(24)),
+                decoration: BoxDecoration(
+                  color: VibeColors.high,
+                  borderRadius: BorderRadius.circular(24),
+                  border: listening ? Border.all(color: VibeColors.blurple, width: 1.5) : null,
+                ),
                 child: TextField(
                   controller: controller,
                   minLines: 1,
@@ -394,7 +641,7 @@ class _Composer extends StatelessWidget {
                   style: const TextStyle(color: VibeColors.text, fontSize: 16),
                   cursorColor: VibeColors.blurple,
                   decoration: InputDecoration(
-                    hintText: hint,
+                    hintText: listening ? 'Listening…' : hint,
                     hintStyle: const TextStyle(color: VibeColors.faint),
                     border: InputBorder.none,
                     isDense: true,
@@ -404,14 +651,37 @@ class _Composer extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            SizedBox(
-              width: 44,
-              height: 44,
-              child: IconButton.filled(
-                style: IconButton.styleFrom(backgroundColor: busy ? VibeColors.highest : VibeColors.blurple),
-                onPressed: busy ? onStop : onSend,
-                icon: Icon(busy ? Icons.stop_rounded : Icons.arrow_upward_rounded, color: Colors.white),
-              ),
+            // Mic while the box is empty, send once there is text (like Discord).
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (context, value, _) {
+                final hasText = value.text.trim().isNotEmpty;
+                final IconData icon;
+                final VoidCallback onTap;
+                if (busy) {
+                  icon = Icons.stop_rounded;
+                  onTap = onStop;
+                } else if (!hasText || listening) {
+                  icon = listening ? Icons.mic : Icons.mic_none_rounded;
+                  onTap = onMic;
+                } else {
+                  icon = imageMode ? Icons.brush_rounded : Icons.arrow_upward_rounded;
+                  onTap = onSend;
+                }
+                return SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: IconButton.filled(
+                    style: IconButton.styleFrom(
+                      backgroundColor: busy
+                          ? VibeColors.highest
+                          : (listening || hasText ? VibeColors.blurple : VibeColors.high),
+                    ),
+                    onPressed: onTap,
+                    icon: Icon(icon, color: Colors.white),
+                  ),
+                );
+              },
             ),
           ],
         ),

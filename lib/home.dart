@@ -34,7 +34,10 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, _) {
         final providers = app.providers;
         final selected =
-            (_selected == 'auto' || providers.contains(_selected) || app.chats.forProvider(_selected).isNotEmpty)
+            (_selected == 'auto' ||
+                    _selected == 'fusion' ||
+                    providers.contains(_selected) ||
+                    app.chats.forProvider(_selected).isNotEmpty)
                 ? _selected
                 : 'auto';
         return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -53,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         _Rail(
                           providers: providers,
+                          health: {for (final p in providers) p: app.providerHealth(p)},
                           selected: selected,
                           onSelect: (p) {
                             VibeHaptics.selection();
@@ -177,6 +181,7 @@ void showAllowExternalAppsDialog(BuildContext context, String? error) {
 
 class _Rail extends StatelessWidget {
   final List<String> providers;
+  final Map<String, String?> health;
   final String selected;
   final ValueChanged<String> onSelect;
   final VoidCallback onAdd;
@@ -184,6 +189,7 @@ class _Rail extends StatelessWidget {
 
   const _Rail({
     required this.providers,
+    required this.health,
     required this.selected,
     required this.onSelect,
     required this.onAdd,
@@ -201,6 +207,7 @@ class _Rail extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 10),
               children: [
                 _RailItem(id: 'auto', selected: selected == 'auto', onTap: () => onSelect('auto')),
+                _RailItem(id: 'fusion', selected: selected == 'fusion', onTap: () => onSelect('fusion')),
                 Center(
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 6),
@@ -210,7 +217,7 @@ class _Rail extends StatelessWidget {
                   ),
                 ),
                 for (final p in providers)
-                  _RailItem(id: p, selected: selected == p, onTap: () => onSelect(p)),
+                  _RailItem(id: p, selected: selected == p, health: health[p], onTap: () => onSelect(p)),
                 const SizedBox(height: 4),
                 _RailButton(icon: Icons.add, tooltip: 'Add provider keys', onTap: onAdd),
               ],
@@ -229,8 +236,9 @@ class _Rail extends StatelessWidget {
 class _RailItem extends StatelessWidget {
   final String id;
   final bool selected;
+  final String? health;
   final VoidCallback onTap;
-  const _RailItem({required this.id, required this.selected, required this.onTap});
+  const _RailItem({required this.id, required this.selected, required this.onTap, this.health});
 
   @override
   Widget build(BuildContext context) {
@@ -264,6 +272,23 @@ class _RailItem extends StatelessWidget {
                 ),
               ),
             ),
+            // Key health dot (green ok, yellow rate limited, red problem).
+            if (healthColor(health) != null)
+              Positioned(
+                right: 10,
+                bottom: 0,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 15,
+                    height: 15,
+                    decoration: BoxDecoration(
+                      color: healthColor(health),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: VibeColors.rail, width: 3),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -336,9 +361,12 @@ class _Pane extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Text(
-              provider == 'auto'
-                  ? 'Picks the best free model for every message'
-                  : '$ready of ${models.length} models ready',
+              switch (provider) {
+                'auto' => 'Picks the best free model for every message'
+                    '${app.strategy.isEmpty ? '' : ' · ${strategyLabel(app.strategy)}'}',
+                'fusion' => 'Several models answer at once, then one blended answer',
+                _ => '$ready of ${models.length} models ready${_healthText(app, provider)}',
+              },
               style: const TextStyle(fontSize: 13, color: VibeColors.faint),
             ),
           ),
@@ -658,3 +686,21 @@ class _UserBar extends StatelessWidget {
     );
   }
 }
+
+String _healthText(AppState app, String provider) => switch (app.providerHealth(provider)) {
+      'healthy' => ' · key OK',
+      'rate_limited' => ' · rate limited',
+      'problem' => ' · key problem',
+      _ => '',
+    };
+
+/// Display names for FreeLLMAPI routing strategies.
+String strategyLabel(String s) => switch (s) {
+      'priority' => 'Manual order',
+      'balanced' => 'Balanced',
+      'smartest' => 'Smartest',
+      'fastest' => 'Fastest',
+      'reliable' => 'Most reliable',
+      'custom' => 'Custom weights',
+      _ => s,
+    };
