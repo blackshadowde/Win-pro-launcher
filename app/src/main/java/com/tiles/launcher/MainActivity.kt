@@ -7,7 +7,9 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
 import android.view.WindowManager
+import android.app.SearchManager
 import android.net.Uri
+import android.speech.RecognizerIntent
 import android.os.Bundle
 import android.os.SystemClock
 import android.os.UserHandle
@@ -94,6 +96,8 @@ class MainActivity : ComponentActivity() {
                 onLaunchApp = ::launchApp,
                 onUninstall = ::uninstall,
                 onLoadFont = { pickFonts.launch(arrayOf("*/*")) },
+                onWebSearch = ::webSearch,
+                onVoiceSearch = ::voiceSearch,
                 onResetFont = {
                     FontStore.clear(this)
                     reloadFont()
@@ -233,6 +237,21 @@ class MainActivity : ComponentActivity() {
             delay(1500)
             if (isResumedNow && state.listPhase == ListPhase.Out) state.resetList()
         }
+    }
+
+    private fun webSearch(query: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, query))
+        }.onFailure {
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))))
+            }
+        }
+    }
+
+    private fun voiceSearch() {
+        runCatching { startActivity(Intent(RecognizerIntent.ACTION_WEB_SEARCH)) }
+            .onFailure { runCatching { startActivity(Intent(Intent.ACTION_VOICE_COMMAND)) } }
     }
 
     private fun reloadFont() {

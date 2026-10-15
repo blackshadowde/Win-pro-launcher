@@ -63,3 +63,46 @@ private fun DrawScope.arrow(ink: Color, from: Offset, to: Offset, sw: Float, s: 
     drawLine(ink, to, to + left, sw, StrokeCap.Round)
     drawLine(ink, to, to + right, sw, StrokeCap.Round)
 }
+
+/** Microphone outline. */
+@Composable
+fun MicGlyph(ink: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val sw = 1.8.dp.toPx()
+        val w = size.width
+        val h = size.height
+        val capW = w * 0.36f
+        val capH = h * 0.52f
+        val left = (w - capW) / 2f
+        drawRoundRect(
+            ink,
+            topLeft = Offset(left, h * 0.06f),
+            size = androidx.compose.ui.geometry.Size(capW, capH),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(capW / 2f),
+            style = Stroke(sw),
+        )
+        drawArc(
+            ink, startAngle = 0f, sweepAngle = 180f, useCenter = false,
+            topLeft = Offset(w * 0.2f, h * 0.22f),
+            size = androidx.compose.ui.geometry.Size(w * 0.6f, h * 0.5f),
+            style = Stroke(sw, cap = StrokeCap.Round),
+        )
+        drawLine(ink, Offset(w / 2f, h * 0.72f), Offset(w / 2f, h * 0.92f), sw, StrokeCap.Round)
+    }
+}
+
+/** Four square panes, used as the search bar's start button. */
+@Composable
+fun PanesGlyph(ink: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val gap = size.minDimension * 0.08f
+        val cell = (size.minDimension - gap) / 2f
+        for (r in 0..1) for (c in 0..1) {
+            drawRect(
+                ink,
+                topLeft = Offset(c * (cell + gap), r * (cell + gap)),
+                size = androidx.compose.ui.geometry.Size(cell, cell),
+            )
+        }
+    }
+}

@@ -69,6 +69,9 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import android.content.Intent
 import android.provider.AlarmClock
 import android.text.format.DateFormat
@@ -91,6 +94,8 @@ fun StartPage(
     scroll: ScrollState,
     onLaunchTile: (AppEntry, Rect) -> Unit,
     onOpenAppList: () -> Unit,
+    onOpenSearch: () -> Unit = {},
+    onVoiceSearch: () -> Unit = {},
 ) {
     val pal = LocalPalette.current
     val density = LocalDensity.current
@@ -139,9 +144,9 @@ fun StartPage(
                     Modifier
                         .fillMaxWidth()
                         .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(start = Margin, end = Margin, top = 20.dp, bottom = 28.dp)
+                        .padding(start = Margin, end = Margin, top = 20.dp, bottom = if (look.modern) 92.dp else 28.dp)
                 ) {
-                    if (!board.editing) {
+                    if (!board.editing && !look.modern) {
                         CircleGlyph(
                             glyph = Glyph.Right,
                             size = 44.dp,
@@ -154,6 +159,36 @@ fun StartPage(
                 }
             }
         }
+        if (look.modern && !board.editing) {
+            BottomSearchBar(onOpenSearch, onVoiceSearch, Modifier.align(Alignment.BottomCenter))
+        }
+    }
+}
+
+/** Modern style: floating search bar at the bottom of Start. */
+@Composable
+private fun BottomSearchBar(onOpen: () -> Unit, onVoice: () -> Unit, modifier: Modifier) {
+    Row(
+        modifier
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(Color(0xE61C1C1C))
+            .clickable { onOpen() }
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PanesGlyph(Color.White, Modifier.size(18.dp))
+        Spacer(Modifier.width(14.dp))
+        BasicText(
+            "Search apps, web, and more",
+            style = wpStyle(15.sp, Color(0xFFBBBBBB)),
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        MicGlyph(Color.White, Modifier.size(22.dp).clickable { onVoice() })
     }
 }
 

@@ -24,6 +24,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -42,6 +49,8 @@ fun LauncherRoot(
     onUninstall: (AppEntry) -> Unit,
     onLoadFont: () -> Unit,
     onResetFont: () -> Unit,
+    onWebSearch: (String) -> Unit,
+    onVoiceSearch: () -> Unit,
 ) {
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
@@ -68,6 +77,8 @@ fun LauncherRoot(
         val listState = rememberLazyListState()
         val scope = rememberCoroutineScope()
         var settingsOpen by remember { mutableStateOf(false) }
+        var searchOpen by remember { mutableStateOf(false) }
+        val searchListState = rememberLazyListState()
 
         // Registered first so the app list's own back handlers (menu, letter grid) win.
         BackHandler(enabled = pager.currentPage == 1) { scope.launch { pager.animateScrollToPage(0) } }
@@ -76,12 +87,14 @@ fun LauncherRoot(
         LaunchedEffect(state.homeRequests) {
             if (state.homeRequests == 0) return@LaunchedEffect
             settingsOpen = false
+            searchOpen = false
             board.exitEdit()
             if (pager.currentPage != 0) pager.animateScrollToPage(0) else startScroll.animateScrollTo(0)
         }
         LaunchedEffect(state.snapHomeRequests) {
             if (state.snapHomeRequests == 0) return@LaunchedEffect
             settingsOpen = false
+            searchOpen = false
             board.exitEdit()
             state.resetList()
             pager.scrollToPage(0)
@@ -118,6 +131,11 @@ fun LauncherRoot(
                             scroll = startScroll,
                             onLaunchTile = onLaunchTile,
                             onOpenAppList = { scope.launch { pager.animateScrollToPage(1) } },
+                            onOpenSearch = {
+                                scope.launch { searchListState.scrollToItem(0) }
+                                searchOpen = true
+                            },
+                            onVoiceSearch = onVoiceSearch,
                         )
                     } else {
                         AppListPage(
@@ -128,8 +146,27 @@ fun LauncherRoot(
                             onLaunch = onLaunchApp,
                             onUninstall = onUninstall,
                             onOpenSettings = { settingsOpen = true },
+                            pinned = if (look.modern) board.pins.mapNotNull { byKey[it.key] } else emptyList(),
+                            onWebSearch = onWebSearch,
+                            onVoiceSearch = onVoiceSearch,
                         )
                     }
+                }
+                // Modern search screen: slides up from the bottom search bar.
+                SearchOverlay(visible = searchOpen, onClose = { searchOpen = false }) {
+                    AppListPage(
+                        apps = apps,
+                        board = board,
+                        state = state,
+                        listState = searchListState,
+                        onLaunch = onLaunchApp,
+                        onUninstall = onUninstall,
+                        onOpenSettings = { settingsOpen = true },
+                        pinned = board.pins.mapNotNull { byKey[it.key] },
+                        autoFocus = true,
+                        onWebSearch = onWebSearch,
+                        onVoiceSearch = onVoiceSearch,
+                    )
                 }
                 if (settingsOpen) {
                     SettingsPage(
@@ -143,6 +180,25 @@ fun LauncherRoot(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchOverlay(visible: Boolean, onClose: () -> Unit, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically(tween(240)) { it / 4 } + fadeIn(tween(200)),
+        exit = slideOutVertically(tween(200)) { it / 4 } + fadeOut(tween(160)),
+    ) {
+        BackHandler { onClose() }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(LocalPalette.current.bg.copy(alpha = 0.95f))
+                .imePadding()
+        ) {
+            content()
         }
     }
 }

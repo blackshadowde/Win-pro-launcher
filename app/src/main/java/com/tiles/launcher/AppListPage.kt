@@ -49,6 +49,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -74,7 +81,6 @@ private fun letterOf(label: String): Char {
     return if (c in 'A'..'Z') c else '#'
 }
 
-private const val LEADING_ITEMS = 2 // search box + settings row
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -86,9 +92,16 @@ fun AppListPage(
     onLaunch: (AppEntry, Rect) -> Unit,
     onUninstall: (AppEntry) -> Unit,
     onOpenSettings: () -> Unit,
+    /** Modern search screen: Start's pins shown as a grid above "All apps". */
+    pinned: List<AppEntry> = emptyList(),
+    autoFocus: Boolean = false,
+    onWebSearch: (String) -> Unit = {},
+    onVoiceSearch: () -> Unit = {},
 ) {
     val pal = LocalPalette.current
     val whiteIcons = LocalWhiteIcons.current
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
     val modern = LocalLook.current.modern
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -115,6 +128,20 @@ fun AppListPage(
         }
     }
 
+    val pinnedRows = remember(pinned) { pinned.take(12).chunked(4) }
+    val showPinned = modern && query.isBlank() && pinnedRows.isNotEmpty()
+    // Items before the A-Z rows: search, settings, then (if shown) pinned header + grid rows + "All apps".
+    val leading = 2 + if (showPinned) pinnedRows.size + 2 else 0
+    val allAppsIndex = leading - 1
+
+    LaunchedEffect(autoFocus) {
+        if (autoFocus) {
+            delay(120)
+            runCatching { focus.requestFocus() }
+            keyboard?.show()
+        }
+    }
+
     val bottomPad = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
     val labelStyle = wpStyle(22.sp, pal.fg, FontWeight.Light)
 
@@ -127,7 +154,14 @@ fun AppListPage(
         ) {
             item(key = "search") {
                 if (modern) {
-                    SearchPill(query, pal) { query = it }
+                    SearchPill(
+                        query = query,
+                        pal = pal,
+                        focus = focus,
+                        onSearch = { if (query.isNotBlank()) onWebSearch(query.trim()) },
+                        onVoice = onVoiceSearch,
+                        onChange = { query = it },
+                    )
                 } else {
                 BasicTextField(
                     value = query,
@@ -170,6 +204,41 @@ fun AppListPage(
                     }
                 }
             }
+            if (showPinned) {
+                item(key = "pinned_head") {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BasicText("Pinned", style = wpStyle(16.sp, pal.fg, FontWeight.SemiBold))
+                        Spacer(Modifier.weight(1f))
+                        BasicText(
+                            "All apps  ›",
+                            style = wpStyle(14.sp, pal.sub),
+                            modifier = Modifier.clickable {
+                                scope.launch { listState.animateScrollToItem(allAppsIndex) }
+                            },
+                        )
+                    }
+                }
+                items(count = pinnedRows.size, key = { "pinned_$it" }) { ri ->
+                    ListTurnstile(3 + ri, "pinned_$ri", state, listState) {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                            pinnedRows[ri].forEach { app ->
+                                PinnedCell(app, pal, Modifier.weight(1f), onLaunch)
+                            }
+                            repeat(4 - pinnedRows[ri].size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
+                item(key = "all_head") {
+                    BasicText(
+                        "All apps",
+                        style = wpStyle(16.sp, pal.fg, FontWeight.SemiBold),
+                        modifier = Modifier.padding(top = 16.dp, bottom = 2.dp),
+                    )
+                }
+            }
             items(
                 count = rows.size,
                 key = { i ->
@@ -179,7 +248,7 @@ fun AppListPage(
                     }
                 },
             ) { i ->
-                val itemIndex = i + LEADING_ITEMS
+                val itemIndex = i + leading
                 when (val r = rows[i]) {
                     is ListRow.Header -> ListTurnstile(itemIndex, "h_$i", state, listState) {
                         if (modern) {
@@ -266,6 +335,18 @@ fun AppListPage(
                     }
                 }
             }
+            if (query.isNotBlank()) {
+                item(key = "web") {
+                    BasicText(
+                        "Search the web for \u201C${query.trim()}\u201D",
+                        style = wpStyle(17.sp, pal.accent),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onWebSearch(query.trim()) }
+                            .padding(vertical = 14.dp),
+                    )
+                }
+            }
         }
 
         if (modern && query.isBlank()) {
@@ -274,7 +355,7 @@ fun AppListPage(
                 present = present,
                 onLetter = { letter ->
                     val idx = rows.indexOfFirst { it is ListRow.Header && it.letter == letter }
-                    if (idx >= 0) scope.launch { listState.scrollToItem(idx + LEADING_ITEMS) }
+                    if (idx >= 0) scope.launch { listState.scrollToItem(idx + leading) }
                 },
                 modifier = Modifier.align(Alignment.CenterEnd).padding(vertical = 12.dp),
             )
@@ -287,7 +368,7 @@ fun AppListPage(
                 onPick = { letter ->
                     jumpOpen = false
                     val idx = rows.indexOfFirst { it is ListRow.Header && it.letter == letter }
-                    if (idx >= 0) scope.launch { listState.scrollToItem(idx + LEADING_ITEMS) }
+                    if (idx >= 0) scope.launch { listState.scrollToItem(idx + leading) }
                 },
                 onDismiss = { jumpOpen = false },
             )
@@ -393,16 +474,26 @@ private fun JumpGrid(present: Set<Char>, onPick: (Char) -> Unit, onDismiss: () -
 }
 
 @Composable
-private fun SearchPill(query: String, pal: Palette, onChange: (String) -> Unit) {
+private fun SearchPill(
+    query: String,
+    pal: Palette,
+    focus: FocusRequester,
+    onSearch: () -> Unit,
+    onVoice: () -> Unit,
+    onChange: (String) -> Unit,
+) {
     BasicTextField(
         value = query,
         onValueChange = onChange,
         singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         textStyle = wpStyle(16.sp, pal.fg),
         cursorBrush = SolidColor(pal.accent),
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 12.dp)
+            .focusRequester(focus)
             .clip(RoundedCornerShape(24.dp))
             .background(pal.fg.copy(alpha = 0.10f))
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -416,10 +507,11 @@ private fun SearchPill(query: String, pal: Palette, onChange: (String) -> Unit) 
                     drawLine(pal.sub, c + Offset(r * 0.7f, r * 0.7f), Offset(size.width - sw, size.height - sw), sw, StrokeCap.Round)
                 }
                 Spacer(Modifier.width(12.dp))
-                Box {
-                    if (query.isEmpty()) BasicText("Search apps", style = wpStyle(16.sp, pal.sub))
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) BasicText("Search apps, web, and more", style = wpStyle(16.sp, pal.sub))
                     inner()
                 }
+                MicGlyph(pal.sub, Modifier.size(22.dp).clickable { onVoice() })
             }
         },
     )
@@ -469,5 +561,30 @@ private fun LetterScrubber(present: Set<Char>, onLetter: (Char) -> Unit, modifie
         letters.forEach { l ->
             BasicText(l.toString(), style = wpStyle(11.sp, if (l in present) pal.fg else pal.sub))
         }
+    }
+}
+
+@Composable
+private fun PinnedCell(app: AppEntry, pal: Palette, modifier: Modifier, onLaunch: (AppEntry, Rect) -> Unit) {
+    val bounds = remember { Rect() }
+    Column(
+        modifier
+            .onGloballyPositioned { c ->
+                val p = c.positionInWindow()
+                bounds.set(p.x.toInt(), p.y.toInt(), (p.x + c.size.width).toInt(), (p.y + c.size.height).toInt())
+            }
+            .clickable { onLaunch(app, Rect(bounds)) }
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Image(app.icon, contentDescription = null, modifier = Modifier.size(46.dp))
+        Spacer(Modifier.height(6.dp))
+        BasicText(
+            app.label,
+            style = wpStyle(12.sp, pal.fg),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
     }
 }
