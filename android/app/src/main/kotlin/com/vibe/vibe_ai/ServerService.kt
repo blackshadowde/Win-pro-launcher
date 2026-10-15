@@ -79,7 +79,7 @@ class ServerService : Service() {
             flags,
         )
         val notification = Notification.Builder(this, CHANNEL)
-            .setSmallIcon(applicationInfo.icon)
+            .setSmallIcon(R.drawable.ic_stat_vibe)
             .setContentTitle("AI server running")
             .setContentText("FreeLLMAPI is ready for Vibe AI")
             .setOngoing(true)
