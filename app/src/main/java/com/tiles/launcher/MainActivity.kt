@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
 
     private var font by mutableStateOf<FontFamily>(FontFamily.Default)
     private var fontCount by mutableIntStateOf(0)
+    private var hasBundledFont by mutableStateOf(false)
 
     private val pickFonts = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNullOrEmpty()) return@registerForActivityResult
@@ -88,6 +89,7 @@ class MainActivity : ComponentActivity() {
                 prefs = prefs,
                 font = font,
                 fontCount = fontCount,
+                hasBundledFont = hasBundledFont,
                 onLaunchTile = ::launchTile,
                 onLaunchApp = ::launchApp,
                 onUninstall = ::uninstall,
@@ -234,7 +236,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun reloadFont() {
-        font = FontStore.family(this) ?: FontFamily.Default
+        val bundled = FontStore.bundled(this)
+        hasBundledFont = bundled != null
+        font = FontStore.family(this) ?: bundled ?: FontFamily.Default
         fontCount = FontStore.count(this)
     }
 

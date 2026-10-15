@@ -67,6 +67,26 @@ object FontStore {
         return ok
     }
 
+    /**
+     * Selawik, bundled by the build into res/font. Looked up by name so the app
+     * still compiles (and falls back to the system font) if the download ever fails.
+     */
+    fun bundled(context: Context): FontFamily? {
+        val weights = listOf(
+            "selawik_light" to FontWeight.Light,
+            "selawik_semilight" to FontWeight(350),
+            "selawik_regular" to FontWeight.Normal,
+            "selawik_semibold" to FontWeight.SemiBold,
+            "selawik_bold" to FontWeight.Bold,
+        )
+        val fonts = weights.mapNotNull { (name, weight) ->
+            @Suppress("DiscouragedApi")
+            val id = context.resources.getIdentifier(name, "font", context.packageName)
+            if (id != 0) Font(id, weight) else null
+        }
+        return if (fonts.isEmpty()) null else FontFamily(fonts)
+    }
+
     fun clear(context: Context) {
         dir(context).listFiles()?.forEach { it.delete() }
     }

@@ -23,6 +23,25 @@ jobs:
         with:
           gradle-version: "8.14.3"
 
+      # Selawik: Microsoft's open-source (OFL) font made to match Segoe.
+      # Fetched at build time and bundled; never committed to the repo.
+      - name: Fetch Selawik font
+        run: |
+          git clone --depth 1 https://github.com/microsoft/Selawik /tmp/selawik || exit 0
+          mkdir -p app/src/main/res/font
+          find /tmp/selawik -iname "*.ttf" | sort | while read -r f; do
+            n=$(basename "$f" | tr 'A-Z' 'a-z')
+            case "$n" in
+              *semilight*|selawksl*) w=semilight ;;
+              *semibold*|selawksb*) w=semibold ;;
+              *light*|selawkl*) w=light ;;
+              *bold*|selawkb*) w=bold ;;
+              *) w=regular ;;
+            esac
+            [ -f "app/src/main/res/font/selawik_$w.ttf" ] || cp "$f" "app/src/main/res/font/selawik_$w.ttf"
+          done
+          ls -l app/src/main/res/font || true
+
       - name: Build release APK
         run: gradle assembleRelease --no-daemon --stacktrace
 

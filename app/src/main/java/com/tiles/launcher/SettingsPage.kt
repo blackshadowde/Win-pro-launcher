@@ -35,6 +35,7 @@ fun SettingsPage(
     prefs: Prefs,
     navMode: String,
     fontCount: Int,
+    hasBundledFont: Boolean,
     onLoadFont: () -> Unit,
     onResetFont: () -> Unit,
     onClose: () -> Unit,
@@ -112,12 +113,15 @@ fun SettingsPage(
 
         BasicText("Font", style = head)
         BasicText(
-            if (fontCount > 0) "using your font files ($fontCount weight${if (fontCount == 1) "" else "s"})"
-            else "using the system font",
+            when {
+                fontCount > 0 -> "using your font files ($fontCount weight${if (fontCount == 1) "" else "s"})"
+                hasBundledFont -> "using Selawik, the built-in Segoe-style font"
+                else -> "using the system font"
+            },
             style = note,
         )
         BasicText(
-            "load font files (.ttf / .otf)",
+            "load your own font files instead (.ttf / .otf)",
             style = body,
             modifier = Modifier.clickable { onLoadFont() }.padding(vertical = 8.dp),
         )
@@ -128,7 +132,7 @@ fun SettingsPage(
         )
         if (fontCount > 0) {
             BasicText(
-                "go back to the system font",
+                if (hasBundledFont) "go back to Selawik" else "go back to the system font",
                 style = body,
                 modifier = Modifier.clickable { onResetFont() }.padding(vertical = 8.dp),
             )
