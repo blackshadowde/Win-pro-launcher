@@ -187,6 +187,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           const _Header('UPDATES'),
           Text('Vibe AI ${_version.isEmpty ? '' : _version}', style: const TextStyle(color: VibeColors.muted)),
+          const Text('Powered by FreeLLMAPI by Tashfeen Ahmed (MIT)',
+              style: TextStyle(color: VibeColors.faint, fontSize: 12.5)),
           const SizedBox(height: 6),
           Wrap(
             spacing: 8,

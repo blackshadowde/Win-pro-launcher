@@ -5,7 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 /// Checks this repo's latest GitHub Release (published by the Build APK workflow).
 class Updates {
-  static const repo = 'blackshadowde/Win-pro-launcher';
+  static const repo = 'blackshadowde/Vibe-AI';
 
   static Future<int> currentBuild() async {
     final info = await PackageInfo.fromPlatform();

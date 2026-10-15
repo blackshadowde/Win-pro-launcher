@@ -1,7 +1,10 @@
 # Vibe AI
 
-A native Android chat app for [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi)
-built into the app (or running in Termux), in Vibe's Discord style.
+A native Android app for [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi): one APK,
+FreeLLMAPI runs inside it (no Termux, no PC, no server), and you chat with 30+ free AI
+providers in a Discord-style app.
+
+**Download:** [latest release](https://github.com/blackshadowde/Vibe-AI/releases) (Android 8+, arm64).
 
 - **Left rail**: *Auto* at the top (FreeLLMAPI picks the best free model for each message),
   then one avatar per provider that has a working key (Gemini, Groq, Cerebras, …).
@@ -12,7 +15,7 @@ built into the app (or running in Termux), in Vibe's Discord style.
 - **Key health**: a dot on each provider avatar (green OK, yellow rate limited, red problem).
 - **Chat extras**: per-chat instructions (system prompt), image creation (image button),
   voice input (mic, uses Android's speech recognition).
-- **User bar**: server status, start/stop FreeLLMAPI in Termux, settings.
+- **User bar**: server status, start/stop the built-in server, live server logs, settings.
 - **Settings → Dashboard**: sign in once (only a 30-day session is kept, not the password);
   the unified API key fills itself in, pick the routing strategy for Auto, check all keys.
 
@@ -67,6 +70,39 @@ The workflow runs `flutter create` to generate the standard Android files; only
 `android/app/src/main/AndroidManifest.xml` and `MainActivity.kt` (the Termux bridge) are kept in the repo.
 
 ## Credits
+
+**[FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi)** by Tashfeen Ahmed (MIT License) does
+all the routing. Vibe AI bundles its production build (code unchanged; only x64-only native modules removed) and runs it with a bundled
+Node.js (from Termux packages). FreeLLMAPI's MIT license notice is kept inside the bundle and
+copied below. Please report routing or provider problems to FreeLLMAPI only if they also happen
+outside this app.
+
+<details><summary>FreeLLMAPI license</summary>
+
+```
+MIT License
+
+Copyright (c) 2026 Tashfeen Ahmed
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+</details>
 
 The slide-over gesture, press motion and haptics (`lib/ui/`) come from Vibe (AGPL-3.0),
 so this app is AGPL-3.0 too. Font: Figtree (SIL OFL).

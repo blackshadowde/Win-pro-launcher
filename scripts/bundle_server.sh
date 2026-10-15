@@ -22,6 +22,7 @@ npm prune --omit=dev
 STAGE="$WORK/stage"
 mkdir -p "$STAGE/server" "$STAGE/client"
 cp package.json package-lock.json "$STAGE/"
+cp LICENSE "$STAGE/LICENSE"  # keep the MIT notice inside the app
 cp -R node_modules "$STAGE/node_modules"
 if [ -d server/node_modules ]; then cp -R server/node_modules "$STAGE/server/node_modules"; fi
 cp -R shared "$STAGE/shared"
