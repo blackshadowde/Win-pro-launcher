@@ -2,6 +2,8 @@ package com.tiles.launcher
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 data class Accent(val name: String, val color: Color)
 
@@ -49,3 +51,15 @@ fun paletteFor(dark: Boolean, accentIndex: Int): Palette {
 }
 
 val LocalPalette = staticCompositionLocalOf { paletteFor(true, DEFAULT_ACCENT) }
+
+enum class UiStyle(val label: String) { Classic("classic 8.1"), Modern("modern") }
+
+/** Shape and spacing that differ between the two styles. */
+data class Look(val modern: Boolean) {
+    val corner: Dp = if (modern) 10.dp else 0.dp
+    val gap: Dp = if (modern) 8.dp else 6.dp
+    /** Modern tiles let the wallpaper show through. */
+    val tileAlpha: Float = if (modern) 0.82f else 1f
+}
+
+val LocalLook = staticCompositionLocalOf { Look(false) }

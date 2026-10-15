@@ -24,6 +24,13 @@ class Prefs(context: Context) {
         private set
     var whiteIcons by mutableStateOf(p.getBoolean("whiteIcons", true))
         private set
+    var style by mutableStateOf(UiStyle.entries.getOrElse(p.getInt("style", 0)) { UiStyle.Classic })
+        private set
+
+    fun setUiStyle(s: UiStyle) {
+        style = s
+        p.edit().putInt("style", s.ordinal).apply()
+    }
 
     fun setWhiteIconsOn(v: Boolean) {
         whiteIcons = v

@@ -60,6 +60,19 @@ fun SettingsPage(
         BasicText("start+theme", style = wpStyle(48.sp, pal.fg, FontWeight.Light))
         Spacer(Modifier.height(20.dp))
 
+        BasicText("Style", style = head)
+        Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            UiStyle.entries.forEach { st ->
+                Choice(st.label, prefs.style == st, pal) { prefs.setUiStyle(st) }
+            }
+        }
+        BasicText(
+            "Modern: wallpaper behind translucent rounded tiles, clock above the tiles, " +
+                "colour icons and an A–Z strip in the app list. Animations stay Windows Phone.",
+            style = note,
+        )
+        Spacer(Modifier.height(16.dp))
+
         BasicText("Background", style = head)
         Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Choice("dark", prefs.dark, pal) { prefs.setDarkTheme(true) }

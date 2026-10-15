@@ -30,6 +30,17 @@ Private Windows Phone 8.1–style launcher for Android (Kotlin + Jetpack Compose
   (all weights at once); the weight is read from the file name. Font files stay on the
   phone and are never committed to this repo.
 
+## Styles
+
+**start + theme → Style**:
+
+- **classic 8.1**: solid black or white background, square tiles, WP app list.
+- **modern**: wallpaper behind translucent rounded tiles, big clock and date above the
+  tiles (tap for alarms), app list with colour icons, search pill and an A–Z strip.
+  Turn off *White tile icons* for colour icons on tiles too.
+
+Both styles use the same Windows Phone animations.
+
 ## Return-home animation tuning
 
 In **start + theme → Return-home animation**:

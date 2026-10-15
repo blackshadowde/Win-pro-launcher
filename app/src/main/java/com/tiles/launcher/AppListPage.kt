@@ -49,6 +49,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.launch
 
 private sealed interface ListRow {
@@ -76,6 +89,7 @@ fun AppListPage(
 ) {
     val pal = LocalPalette.current
     val whiteIcons = LocalWhiteIcons.current
+    val modern = LocalLook.current.modern
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var menuFor by remember { mutableStateOf<String?>(null) }
@@ -108,10 +122,13 @@ fun AppListPage(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 16.dp, top = 12.dp, bottom = bottomPad),
+            contentPadding = PaddingValues(start = 20.dp, end = if (modern) 34.dp else 16.dp, top = 12.dp, bottom = bottomPad),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             item(key = "search") {
+                if (modern) {
+                    SearchPill(query, pal) { query = it }
+                } else {
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -130,6 +147,7 @@ fun AppListPage(
                         }
                     },
                 )
+                }
             }
             item(key = "settings") {
                 if (query.isBlank()) {
@@ -140,9 +158,15 @@ fun AppListPage(
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(Modifier.size(50.dp).border(2.dp, pal.sub))
-                        Spacer(Modifier.width(14.dp))
-                        BasicText("start + theme", style = labelStyle)
+                        if (modern) {
+                            Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(pal.accent))
+                            Spacer(Modifier.width(16.dp))
+                            BasicText("Start settings", style = wpStyle(17.sp, pal.fg))
+                        } else {
+                            Box(Modifier.size(50.dp).border(2.dp, pal.sub))
+                            Spacer(Modifier.width(14.dp))
+                            BasicText("start + theme", style = labelStyle)
+                        }
                     }
                 }
             }
@@ -158,6 +182,16 @@ fun AppListPage(
                 val itemIndex = i + LEADING_ITEMS
                 when (val r = rows[i]) {
                     is ListRow.Header -> ListTurnstile(itemIndex, "h_$i", state, listState) {
+                        if (modern) {
+                            BasicText(
+                                text = r.letter.toString(),
+                                style = wpStyle(18.sp, pal.fg),
+                                modifier = Modifier
+                                    .padding(top = 14.dp, bottom = 4.dp)
+                                    .clickable { jumpOpen = true }
+                                    .padding(end = 24.dp),
+                            )
+                        } else {
                         Box(
                             Modifier
                                 .padding(top = 10.dp, bottom = 4.dp)
@@ -171,6 +205,7 @@ fun AppListPage(
                                 style = wpStyle(26.sp, pal.accent, FontWeight.Light),
                                 modifier = Modifier.padding(start = 6.dp, bottom = 2.dp),
                             )
+                        }
                         }
                     }
                     is ListRow.App -> ListTurnstile(itemIndex, r.app.key, state, listState) {
@@ -197,15 +232,22 @@ fun AppListPage(
                                     .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Box(Modifier.size(50.dp).background(pal.accent), contentAlignment = Alignment.Center) {
-                                    Image(
-                                        bitmap = if (whiteIcons) app.glyph ?: app.icon else app.icon,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(34.dp),
-                                    )
+                                if (modern) {
+                                    // Full-colour icons read well in a list, one per row.
+                                    Image(app.icon, contentDescription = null, modifier = Modifier.size(40.dp))
+                                    Spacer(Modifier.width(16.dp))
+                                    BasicText(app.label, style = wpStyle(17.sp, pal.fg), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                } else {
+                                    Box(Modifier.size(50.dp).background(pal.accent), contentAlignment = Alignment.Center) {
+                                        Image(
+                                            bitmap = if (whiteIcons) app.glyph ?: app.icon else app.icon,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(34.dp),
+                                        )
+                                    }
+                                    Spacer(Modifier.width(14.dp))
+                                    BasicText(app.label, style = labelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                                Spacer(Modifier.width(14.dp))
-                                BasicText(app.label, style = labelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             if (menuFor == app.key) {
                                 val pinned = board.isPinned(app.key)
@@ -224,6 +266,18 @@ fun AppListPage(
                     }
                 }
             }
+        }
+
+        if (modern && query.isBlank()) {
+            val present = rows.filterIsInstance<ListRow.Header>().map { it.letter }.toSet()
+            LetterScrubber(
+                present = present,
+                onLetter = { letter ->
+                    val idx = rows.indexOfFirst { it is ListRow.Header && it.letter == letter }
+                    if (idx >= 0) scope.launch { listState.scrollToItem(idx + LEADING_ITEMS) }
+                },
+                modifier = Modifier.align(Alignment.CenterEnd).padding(vertical = 12.dp),
+            )
         }
 
         if (jumpOpen) {
@@ -334,6 +388,86 @@ private fun JumpGrid(present: Set<Char>, onPick: (Char) -> Unit, onDismiss: () -
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchPill(query: String, pal: Palette, onChange: (String) -> Unit) {
+    BasicTextField(
+        value = query,
+        onValueChange = onChange,
+        singleLine = true,
+        textStyle = wpStyle(16.sp, pal.fg),
+        cursorBrush = SolidColor(pal.accent),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(pal.fg.copy(alpha = 0.10f))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        decorationBox = { inner ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Canvas(Modifier.size(18.dp)) {
+                    val sw = 2.dp.toPx()
+                    val r = size.minDimension * 0.32f
+                    val c = Offset(r + sw, r + sw)
+                    drawCircle(pal.sub, r, c, style = Stroke(sw))
+                    drawLine(pal.sub, c + Offset(r * 0.7f, r * 0.7f), Offset(size.width - sw, size.height - sw), sw, StrokeCap.Round)
+                }
+                Spacer(Modifier.width(12.dp))
+                Box {
+                    if (query.isEmpty()) BasicText("Search apps", style = wpStyle(16.sp, pal.sub))
+                    inner()
+                }
+            }
+        },
+    )
+}
+
+/** A–Z strip on the right edge: tap or slide to jump to a letter. */
+@Composable
+private fun LetterScrubber(present: Set<Char>, onLetter: (Char) -> Unit, modifier: Modifier) {
+    val pal = LocalPalette.current
+    val haptics = LocalHapticFeedback.current
+    val letters = ('A'..'Z').toList() + '#'
+    val presentNow by rememberUpdatedState(present)
+    val onLetterNow by rememberUpdatedState(onLetter)
+    Column(
+        modifier
+            .fillMaxHeight()
+            .width(26.dp)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    var last: Char? = null
+                    fun pick(y: Float) {
+                        val i = (y / size.height.coerceAtLeast(1) * letters.size).toInt().coerceIn(0, letters.lastIndex)
+                        val l = letters[i]
+                        if (l != last) {
+                            last = l
+                            if (l in presentNow) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onLetterNow(l)
+                            }
+                        }
+                    }
+                    val down = awaitFirstDown()
+                    down.consume()
+                    pick(down.position.y)
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!ch.pressed) break
+                        pick(ch.position.y)
+                        ch.consume()
+                    }
+                }
+            },
+        verticalArrangement = Arrangement.SpaceEvenly,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        letters.forEach { l ->
+            BasicText(l.toString(), style = wpStyle(11.sp, if (l in present) pal.fg else pal.sub))
         }
     }
 }

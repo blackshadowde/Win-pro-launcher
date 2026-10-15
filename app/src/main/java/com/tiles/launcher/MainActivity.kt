@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.LauncherApps
 import android.graphics.Color
 import android.graphics.Rect
+import android.graphics.drawable.ColorDrawable
+import android.view.WindowManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
@@ -66,8 +68,10 @@ class MainActivity : ComponentActivity() {
         prefs = Prefs(this)
         board = Board(prefs)
 
-        applyBars(prefs.dark)
-        lifecycleScope.launch { snapshotFlow { prefs.dark }.collect { applyBars(it) } }
+        applyLook(prefs.dark, prefs.style)
+        lifecycleScope.launch {
+            snapshotFlow { prefs.dark to prefs.style }.collect { (dark, style) -> applyLook(dark, style) }
+        }
 
         // Lowest-priority back handler: back does nothing on Start, as on Windows Phone.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -240,8 +244,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun applyBars(dark: Boolean) {
-        val style = if (dark) {
+    /** Modern shows the wallpaper behind the launcher; Classic is solid. */
+    private fun applyLook(dark: Boolean, uiStyle: UiStyle) {
+        val modern = uiStyle == UiStyle.Modern
+        if (modern) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+            window.setBackgroundDrawable(ColorDrawable(if (dark) Color.BLACK else Color.WHITE))
+        }
+        // Light status-bar icons unless it's Classic light, which has a white bar.
+        val style = if (dark || modern) {
             SystemBarStyle.dark(Color.TRANSPARENT)
         } else {
             SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)

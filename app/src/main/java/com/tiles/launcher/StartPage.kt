@@ -69,9 +69,19 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import android.content.Intent
+import android.provider.AlarmClock
+import android.text.format.DateFormat
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 private val Margin = 12.dp
-private val Gap = 6.dp
 
 @Composable
 fun StartPage(
@@ -84,10 +94,12 @@ fun StartPage(
 ) {
     val pal = LocalPalette.current
     val density = LocalDensity.current
+    val look = LocalLook.current
+    val gap = look.gap
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val cols = board.columns
-        val cell = (maxWidth - Margin * 2 - Gap * (cols - 1)) / cols
-        val pitch = cell + Gap
+        val cell = (maxWidth - Margin * 2 - gap * (cols - 1)) / cols
+        val pitch = cell + gap
         val pitchPx = with(density) { pitch.toPx() }
         val marginPx = with(density) { Margin.toPx() }
         val order = board.previewOrder().filter { apps.containsKey(it.key) }
@@ -109,6 +121,7 @@ fun StartPage(
                 .verticalScroll(scroll, enabled = board.dragKey == null)
         ) {
             Column(Modifier.fillMaxWidth().padding(top = topPad)) {
+                if (look.modern) ClockHeader(state)
                 Box(
                     Modifier
                         .padding(horizontal = Margin)
@@ -160,8 +173,9 @@ private fun TileView(
     val pal = LocalPalette.current
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
-    val w = cellDp * pin.size.w + Gap * (pin.size.w - 1)
-    val h = cellDp * pin.size.h + Gap * (pin.size.h - 1)
+    val gap = LocalLook.current.gap
+    val w = cellDp * pin.size.w + gap * (pin.size.w - 1)
+    val h = cellDp * pin.size.h + gap * (pin.size.h - 1)
 
     // Position: springs to its packed cell; follows the finger while dragged.
     val target = Offset(cell.col * pitchPx, cell.row * pitchPx)
@@ -393,7 +407,13 @@ private fun TileView(
 
 @Composable
 private fun TileFace(pin: Pin, app: AppEntry, pal: Palette) {
-    Box(Modifier.fillMaxSize().background(pal.accent)) {
+    val look = LocalLook.current
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(look.corner))
+            .background(pal.accent.copy(alpha = look.tileAlpha))
+    ) {
         Image(
             bitmap = if (LocalWhiteIcons.current) app.glyph ?: app.icon else app.icon,
             contentDescription = app.label,
@@ -413,5 +433,40 @@ private fun TileFace(pin: Pin, app: AppEntry, pal: Palette) {
                     .padding(start = 8.dp, end = 8.dp, bottom = 6.dp),
             )
         }
+    }
+}
+
+/** Modern style: big clock and date above the tiles; scrolls away with them. Tap opens alarms. */
+@Composable
+private fun ClockHeader(state: StartState) {
+    val pal = LocalPalette.current
+    val context = LocalContext.current
+    val source = remember { MutableInteractionSource() }
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(state.epoch) {
+        while (true) {
+            now = LocalDateTime.now()
+            delay(60_000L - System.currentTimeMillis() % 60_000L)
+        }
+    }
+    val pattern = if (DateFormat.is24HourFormat(context)) "HH:mm" else "h:mm"
+    val time = now.format(DateTimeFormatter.ofPattern(pattern))
+    val date = now.format(DateTimeFormatter.ofPattern("EEE, MMM d, yyyy"))
+    val shown = state.phase == Phase.In
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(Motion.IN_MS), label = "header")
+    Column(
+        Modifier
+            .padding(start = Margin + 4.dp, top = 20.dp, bottom = 28.dp)
+            .graphicsLayer { this.alpha = alpha }
+            .clickable(interactionSource = source, indication = null) {
+                runCatching {
+                    context.startActivity(
+                        Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            }
+    ) {
+        BasicText(time, style = wpStyle(84.sp, pal.fg, FontWeight.Light))
+        BasicText(date, style = wpStyle(22.sp, pal.fg))
     }
 }

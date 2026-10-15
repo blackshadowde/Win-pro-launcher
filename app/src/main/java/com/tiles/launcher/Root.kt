@@ -24,6 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.launch
@@ -53,11 +54,13 @@ fun LauncherRoot(
     }
     val byKey = remember(apps) { apps.associateBy { it.key } }
     val pal = paletteFor(prefs.dark, prefs.accent)
+    val look = Look(prefs.style == UiStyle.Modern)
 
     CompositionLocalProvider(
         LocalPalette provides pal,
         LocalFont provides font,
         LocalWhiteIcons provides prefs.whiteIcons,
+        LocalLook provides look,
     ) {
         val pager = rememberPagerState(pageCount = { 2 })
         val startScroll = rememberScrollState()
@@ -84,13 +87,15 @@ fun LauncherRoot(
             startScroll.scrollTo(0)
         }
 
-        Column(Modifier.fillMaxSize().background(pal.bg)) {
+        // Modern: the wallpaper shows through, dimmed slightly so text stays readable.
+        val pageBg = if (look.modern) pal.bg.copy(alpha = 0.35f) else pal.bg
+        Column(Modifier.fillMaxSize().background(pageBg)) {
             // Solid status bar, like Windows Phone: content never scrolls under it.
             Box(
                 Modifier
                     .fillMaxWidth()
                     .windowInsetsTopHeight(WindowInsets.statusBars)
-                    .background(pal.bg)
+                    .background(if (look.modern) Color.Transparent else pal.bg)
             )
             Box(
                 Modifier
