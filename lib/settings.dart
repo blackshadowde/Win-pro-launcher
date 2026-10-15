@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'app_state.dart';
 import 'builtin_node.dart';
+import 'updates.dart';
 import 'home.dart';
 import 'providers.dart';
 import 'termux.dart';
@@ -29,6 +30,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _savingStrategy;
   bool _showKey = false;
   bool _testingNode = false;
+  bool _checkingUpdate = false;
+  String _version = '';
+  String? _updateText;
+  UpdateInfo? _update;
   String? _nodeResult;
   bool? _termuxInstalled;
   bool? _termuxAllowed;
@@ -37,6 +42,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _checkTermux();
+    Updates.currentVersion().then((v) {
+      if (mounted) setState(() => _version = v);
+    });
+  }
+
+  Future<void> _checkUpdate() async {
+    setState(() {
+      _checkingUpdate = true;
+      _updateText = null;
+      _update = null;
+    });
+    try {
+      final u = await Updates.check();
+      _update = u;
+      _updateText = u == null ? 'You have the latest version.' : '${u.version} is available.';
+    } catch (e) {
+      _updateText = 'Could not check: $e';
+    }
+    if (mounted) setState(() => _checkingUpdate = false);
   }
 
   Future<void> _checkTermux() async {
@@ -157,6 +181,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          const _Header('UPDATES'),
+          Text('Vibe AI ${_version.isEmpty ? '' : _version}', style: const TextStyle(color: VibeColors.muted)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _checkingUpdate ? null : _checkUpdate,
+                icon: _checkingUpdate
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.system_update_alt, size: 18),
+                label: Text(_checkingUpdate ? 'Checking…' : 'Check for updates'),
+              ),
+              if (_update != null)
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: VibeColors.blurple),
+                  onPressed: () =>
+                      launchUrl(Uri.parse(_update!.downloadUrl), mode: LaunchMode.externalApplication),
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: Text('Download ${_update!.version}'),
+                ),
+            ],
+          ),
+          if (_updateText != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(_updateText!, style: const TextStyle(color: VibeColors.faint, fontSize: 13)),
+            ),
           const _Header('SERVER'),
           _Field(label: 'API address', controller: _base, hint: 'http://127.0.0.1:3001'),
           _Field(

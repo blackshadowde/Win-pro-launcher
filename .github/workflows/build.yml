@@ -4,6 +4,10 @@ name: Build APK
 on:
   workflow_dispatch:
 
+# Needed to publish the APK as a GitHub Release.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -46,13 +50,67 @@ jobs:
           }
           EOF
 
+      # Release signing from repo secrets (same names and alias as Vibe), so every new
+      # APK installs over the previous one. Without the secrets it falls back to the debug key.
+      - name: Release signing
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KSPASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KS" ] || [ -z "$KSPASS" ]; then
+            echo "::warning::Signing secrets not set; this APK uses the debug key and won't update a release-signed install."
+            exit 0
+          fi
+          echo "$KS" | base64 -d > android/app/release.jks
+          cat >> android/app/build.gradle.kts <<'EOF'
+
+          android {
+              signingConfigs {
+                  create("vibeRelease") {
+                      storeFile = file("release.jks")
+                      storePassword = System.getenv("KSPASS")
+                      keyAlias = System.getenv("KSALIAS")?.takeIf { it.isNotBlank() } ?: "vibe"
+                      keyPassword = System.getenv("KSPASS")
+                  }
+              }
+              buildTypes {
+                  getByName("release") {
+                      signingConfig = signingConfigs.getByName("vibeRelease")
+                  }
+              }
+          }
+          EOF
+
       - name: Get packages
         run: flutter pub get
 
       - name: Build release APK
-        run: flutter build apk --release --target-platform android-arm64
+        env:
+          KSPASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KSALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        # Build number = run number, so the app can tell which release is newer.
+        run: >
+          flutter build apk --release --target-platform android-arm64
+          --build-name 0.1.${{ github.run_number }} --build-number ${{ github.run_number }}
+
+      - name: Name the APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk vibe-ai-${{ github.run_number }}.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: vibe-ai-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: vibe-ai-${{ github.run_number }}.apk
+
+      # Each build becomes a GitHub Release; the app's "Check for updates" reads the latest one.
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: Vibe AI 0.1.${{ github.run_number }}
+          files: vibe-ai-${{ github.run_number }}.apk
+          make_latest: true
+          body: |
+            Build ${{ github.run_number }} from commit ${{ github.sha }}.
+
+            Changes since the last build:
+            https://github.com/${{ github.repository }}/commits/${{ github.sha }}

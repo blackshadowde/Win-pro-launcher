@@ -15,6 +15,7 @@ dependencies:
   url_launcher: any
   flutter_markdown: any
   speech_to_text: any
+  package_info_plus: any
 
 flutter:
   uses-material-design: true

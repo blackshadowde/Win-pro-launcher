@@ -21,3 +21,6 @@ android/app/src/debug/
 android/app/src/profile/
 test/
 android/app/src/main/jniLibs/
+*.jks
+*.keystore
+android/key.properties

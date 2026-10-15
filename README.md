@@ -27,6 +27,25 @@ running in Termux on the same phone, in Vibe's Discord style.
 4. Tap **Start** in the user bar, open the dashboard (**+** in the rail) and add your provider keys.
 5. In **Settings → Dashboard**, sign in with the dashboard account. The API key fills itself in.
 
+## Signing (one time)
+
+Add these repo secrets (**Settings → Secrets and variables → Actions → New repository secret**).
+They are the same names Vibe uses, so you can paste Vibe's values:
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | your keystore file, base64 encoded |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore (and key) password |
+| `ANDROID_KEY_ALIAS` | optional; defaults to `vibe` |
+
+Every build is then signed with your key, so new APKs install over the old one and chats stay.
+Without the secrets the build still works but uses a throwaway debug key.
+
+## Updates
+
+Each **Build APK** run also publishes a GitHub Release (`v0.1.<run number>`) with the APK.
+In the app: **Settings → Updates → Check for updates → Download**.
+
 ## Build
 
 Actions tab → **Build APK** → Run workflow → download `vibe-ai-apk`.
