@@ -17,17 +17,23 @@ class Updates {
     return '${info.version} (${info.buildNumber})';
   }
 
-  /// Returns the newer release, or null when you're up to date.
+  /// Build number from a tag like v0.1.12 or v0.1.12-rc.
+  static int buildOf(String tag) => int.tryParse(RegExp(r'\.(\d+)(?:-\w+)?$').firstMatch(tag)?.group(1) ?? '') ?? 0;
+
+  /// Returns the newest release (stable or release candidate), or null when you're up to date.
   static Future<UpdateInfo?> check() async {
     final res = await http
-        .get(Uri.parse('https://api.github.com/repos/$repo/releases/latest'),
+        .get(Uri.parse('https://api.github.com/repos/$repo/releases?per_page=10'),
             headers: {'Accept': 'application/vnd.github+json'})
         .timeout(const Duration(seconds: 15));
     if (res.statusCode == 404) return null; // no release published yet
     if (res.statusCode != 200) throw Exception('GitHub answered ${res.statusCode}');
-    final j = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = (jsonDecode(res.body) as List).whereType<Map<String, dynamic>>().where((r) => r['draft'] != true).toList()
+      ..sort((a, b) => buildOf((b['tag_name'] ?? '').toString()).compareTo(buildOf((a['tag_name'] ?? '').toString())));
+    if (list.isEmpty) return null;
+    final j = list.first;
     final tag = (j['tag_name'] ?? '').toString();
-    final build = int.tryParse(tag.split('.').last) ?? 0;
+    final build = buildOf(tag);
     if (build <= await currentBuild()) return null;
     String? apk;
     for (final a in (j['assets'] as List? ?? const [])) {

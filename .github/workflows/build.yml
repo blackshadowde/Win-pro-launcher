@@ -3,6 +3,12 @@ name: Build APK
 # Manual only: run it from the Actions tab when you want an APK.
 on:
   workflow_dispatch:
+    inputs:
+      channel:
+        description: "Release type"
+        type: choice
+        options: [rc, stable]
+        default: rc
 
 # Needed to publish the APK as a GitHub Release.
 permissions:
@@ -114,14 +120,18 @@ jobs:
           path: vibe-ai-${{ github.run_number }}.apk
 
       # Each build becomes a GitHub Release; the app's "Check for updates" reads the latest one.
+      # rc = release candidate (marked pre-release); stable = normal release.
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.${{ github.run_number }}
-          name: Vibe AI 0.1.${{ github.run_number }}
+          tag_name: v0.1.${{ github.run_number }}${{ inputs.channel == 'rc' && '-rc' || '' }}
+          name: Vibe AI 0.1.${{ github.run_number }}${{ inputs.channel == 'rc' && ' RC' || '' }}
           files: vibe-ai-${{ github.run_number }}.apk
-          make_latest: true
+          prerelease: ${{ inputs.channel == 'rc' }}
+          make_latest: ${{ inputs.channel == 'rc' && 'false' || 'true' }}
           body: |
+            ${{ inputs.channel == 'rc' && 'Release candidate: please test before it becomes stable.' || 'Stable release.' }}
+
             Build ${{ github.run_number }} from commit ${{ github.sha }}.
 
             Changes since the last build:
