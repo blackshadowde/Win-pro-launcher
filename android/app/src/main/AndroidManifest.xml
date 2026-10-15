@@ -5,6 +5,12 @@
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
     <!-- Voice input in chats (Android's built-in speech recognition). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Built-in server: runs in the background with a notification, screen-off safe. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name="${applicationName}"
@@ -30,6 +36,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".ServerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs the local AI server that this app chats with" />
+        </service>
 
         <meta-data
             android:name="flutterEmbedding"

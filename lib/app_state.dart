@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'server.dart';
 import 'store.dart';
 
 enum ServerStatus { checking, running, stopped, needsKey, error }
@@ -16,6 +17,15 @@ class AppState extends ChangeNotifier {
   String dashboardUrl = 'http://127.0.0.1:5173';
   String apiKey = '';
   String folder = 'freellmapi';
+
+  /// `builtin` = FreeLLMAPI runs inside this app; `termux` = it runs in Termux.
+  String serverMode = 'builtin';
+  /// Built-in server process: stopped | preparing | running | exited.
+  String serverState = 'stopped';
+  bool get builtin => serverMode == 'builtin';
+
+  /// Where the dashboard is: the built-in server serves it on its own port.
+  String get dashboardLink => builtin ? baseUrl : dashboardUrl;
 
   /// Dashboard session (30 days). Only the token is kept, never the password.
   String dashToken = '';
@@ -44,6 +54,7 @@ class AppState extends ChangeNotifier {
     dashboardUrl = _prefs.getString('dashboardUrl') ?? dashboardUrl;
     apiKey = _prefs.getString('apiKey') ?? apiKey;
     folder = _prefs.getString('folder') ?? folder;
+    serverMode = _prefs.getString('serverMode') ?? serverMode;
     dashToken = _prefs.getString('dashToken') ?? '';
     dashEmail = _prefs.getString('dashEmail') ?? '';
     await chats.load();
@@ -71,9 +82,21 @@ class AppState extends ChangeNotifier {
   }
 
   /// Polls /v1/models: tells us if the server is up and which models can answer.
+  Future<void> setServerMode(String mode) async {
+    serverMode = mode;
+    await _prefs.setString('serverMode', mode);
+    notifyListeners();
+    await refresh();
+  }
+
   Future<void> refresh() async {
     if (_refreshing) return;
     _refreshing = true;
+    if (builtin) {
+      try {
+        serverState = (await BuiltinServer.snapshot(1 << 30)).state;
+      } catch (_) {}
+    }
     try {
       models = await api.models();
       status = ServerStatus.running;
@@ -84,8 +107,16 @@ class AppState extends ChangeNotifier {
       status = e.status == 401 || e.status == 403 ? ServerStatus.needsKey : ServerStatus.error;
       lastError = e.message;
     } catch (_) {
-      status = ServerStatus.stopped;
-      lastError = null;
+      if (builtin && (serverState == 'preparing' || serverState == 'running')) {
+        status = ServerStatus.checking; // still starting up
+        lastError = null;
+      } else if (builtin && serverState == 'exited') {
+        status = ServerStatus.error;
+        lastError = 'The built-in server stopped unexpectedly. Open Logs to see why.';
+      } else {
+        status = ServerStatus.stopped;
+        lastError = null;
+      }
     } finally {
       _refreshing = false;
       notifyListeners();

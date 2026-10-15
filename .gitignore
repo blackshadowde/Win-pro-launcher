@@ -24,3 +24,5 @@ android/app/src/main/jniLibs/
 *.jks
 *.keystore
 android/key.properties
+assets/server/freellmapi.zip
+assets/server/version.txt

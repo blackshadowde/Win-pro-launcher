@@ -35,6 +35,45 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vibe_ai/server")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        if (Build.VERSION.SDK_INT >= 33 &&
+                            checkSelfPermission(NOTIFY) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            requestPermissions(arrayOf(NOTIFY), 8)
+                        }
+                        try {
+                            startForegroundService(Intent(this, ServerService::class.java))
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("start_failed", e.message, null)
+                        }
+                    }
+                    "stop" -> {
+                        startService(Intent(this, ServerService::class.java).setAction(ServerService.ACTION_STOP))
+                        result.success(true)
+                    }
+                    "snapshot" -> result.success(ServerRuntime.snapshot(call.argument<Int>("from") ?: 0))
+                    "batteryUnrestricted" -> {
+                        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+                        result.success(pm.isIgnoringBatteryOptimizations(packageName))
+                    }
+                    "openBatterySettings" -> {
+                        try {
+                            startActivity(
+                                Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                    .setData(android.net.Uri.parse("package:$packageName"))
+                            )
+                        } catch (e: Exception) {
+                            startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        }
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vibe_ai/termux")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -109,5 +148,6 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val TERMUX = "com.termux"
         private const val PERMISSION = "com.termux.permission.RUN_COMMAND"
+        private const val NOTIFY = "android.permission.POST_NOTIFICATIONS"
     }
 }

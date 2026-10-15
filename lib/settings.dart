@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'app_state.dart';
 import 'builtin_node.dart';
+import 'logs.dart';
+import 'server.dart';
 import 'updates.dart';
 import 'home.dart';
 import 'providers.dart';
@@ -212,6 +214,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Text(_updateText!, style: const TextStyle(color: VibeColors.faint, fontSize: 13)),
             ),
           const _Header('SERVER'),
+          for (final (mode, label, hint) in const [
+            ('builtin', 'Built into this app', 'FreeLLMAPI runs inside Vibe AI. No Termux needed.'),
+            ('termux', 'Termux', 'FreeLLMAPI runs in Termux; Vibe AI starts and stops it there.'),
+          ])
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () async {
+                await widget.app.setServerMode(mode);
+                if (mounted) setState(() {});
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      widget.app.serverMode == mode ? Icons.radio_button_checked : Icons.radio_button_off,
+                      color: widget.app.serverMode == mode ? VibeColors.blurple : VibeColors.faint,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label, style: const TextStyle(color: VibeColors.text, fontSize: 15)),
+                          Text(hint, style: const TextStyle(color: VibeColors.faint, fontSize: 12.5)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (widget.app.builtin)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogsScreen())),
+                icon: const Icon(Icons.terminal, size: 18),
+                label: const Text('Server logs'),
+              ),
+            ),
+          const SizedBox(height: 8),
           _Field(label: 'API address', controller: _base, hint: 'http://127.0.0.1:3001'),
           _Field(
             label: 'Unified API key',
@@ -223,17 +268,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: () => setState(() => _showKey = !_showKey),
             ),
           ),
-          _Field(label: 'Dashboard address', controller: _dash, hint: 'http://127.0.0.1:5173'),
+          if (!widget.app.builtin)
+            _Field(label: 'Dashboard address', controller: _dash, hint: 'http://127.0.0.1:5173'),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
-              onPressed: () => launchUrl(Uri.parse(_dash.text.trim()), mode: LaunchMode.externalApplication),
+              onPressed: () => launchUrl(
+                Uri.parse(widget.app.builtin ? _base.text.trim() : _dash.text.trim()),
+                mode: LaunchMode.externalApplication,
+              ),
               icon: const Icon(Icons.open_in_new, size: 18),
               label: const Text('Open dashboard (add provider keys, copy the unified key)'),
             ),
           ),
           const _Header('DASHBOARD'),
           ListenableBuilder(listenable: widget.app, builder: (context, _) => _dashboardSection()),
+          if (!widget.app.builtin) ...[
           const _Header('TERMUX'),
           _StatusLine(
             ok: _termuxInstalled,
@@ -301,6 +351,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Opens Termux so you can watch; takes a few minutes the first time.',
             style: TextStyle(color: VibeColors.faint, fontSize: 12.5),
           ),
+          ],
           const _Header('BUILT-IN SERVER (TEST)'),
           const Text(
             'Checks whether this app can run FreeLLMAPI by itself, without Termux: '
@@ -347,11 +398,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
           const _Header('KEEP IT RUNNING'),
-          const Text(
-            'Android can pause Termux with the screen off. Start keeps a wake lock while the server runs. '
-            'Also set Battery to "Unrestricted" for Termux in Android settings.',
-            style: TextStyle(color: VibeColors.muted, fontSize: 13.5, height: 1.35),
+          Text(
+            widget.app.builtin
+                ? 'The server runs in the background with a notification and keeps the phone awake enough '
+                    'to answer. For vivo, also allow Vibe AI to run without battery limits:'
+                : 'Android can pause Termux with the screen off. Start keeps a wake lock while the server runs. '
+                    'Also set Battery to "Unrestricted" for Termux in Android settings.',
+            style: const TextStyle(color: VibeColors.muted, fontSize: 13.5, height: 1.35),
           ),
+          if (widget.app.builtin)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: BuiltinServer.openBatterySettings,
+                icon: const Icon(Icons.battery_charging_full, size: 18),
+                label: const Text('Allow running in the background'),
+              ),
+            ),
         ],
       ),
     );

@@ -19,6 +19,9 @@ dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # FreeLLMAPI server bundle, added by the Build APK workflow
+    - assets/server/
   fonts:
     # Figtree (SIL Open Font License, assets/fonts/Figtree-OFL.txt), same as Vibe
     - family: Figtree

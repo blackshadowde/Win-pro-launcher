@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'api.dart';
 import 'app_state.dart';
 import 'chat.dart';
+import 'logs.dart';
+import 'server.dart';
 import 'providers.dart';
 import 'settings.dart';
 import 'store.dart';
@@ -69,7 +71,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  _UserBar(app: app, onStart: _startServer, onStop: _stopServer, onSettings: _openSettings),
+                  _UserBar(
+                    app: app,
+                    onStart: _startServer,
+                    onStop: _stopServer,
+                    onSettings: _openSettings,
+                    onLogs: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogsScreen())),
+                  ),
                 ],
               ),
             ),
@@ -84,11 +92,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openDashboard() async {
-    final ok = await launchUrl(Uri.parse(app.dashboardUrl), mode: LaunchMode.externalApplication);
+    final ok = await launchUrl(Uri.parse(app.dashboardLink), mode: LaunchMode.externalApplication);
     if (!ok && mounted) _snack('Could not open the dashboard. Is FreeLLMAPI running?');
   }
 
   Future<void> _startServer() async {
+    if (app.builtin) {
+      try {
+        await BuiltinServer.start();
+        app.markStarting();
+        _snack('Starting the built-in server… the first start unpacks it and can take a minute.');
+      } on PlatformException catch (e) {
+        _snack('Could not start: ${e.message}');
+      }
+      return;
+    }
     if (!await _termuxReady()) return;
     try {
       await Termux.run(Termux.startScript(app.folder));
@@ -100,6 +118,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _stopServer() async {
+    if (app.builtin) {
+      await BuiltinServer.stop();
+      _snack('Stopping the server…');
+      Future.delayed(const Duration(seconds: 2), app.refresh);
+      return;
+    }
     if (!await _termuxReady()) return;
     try {
       await Termux.run(Termux.stopScript(app.folder));
@@ -565,11 +589,17 @@ class _SetupCard extends StatelessWidget {
       _ => 'FreeLLMAPI isn\'t running',
     };
     final body = switch (app.status) {
-      ServerStatus.checking => 'Looking for the server at ${app.baseUrl}.',
-      ServerStatus.needsKey =>
-        'Open the dashboard, copy the unified key from the Keys page, and paste it in Settings.',
-      ServerStatus.error => app.lastError ?? 'Check Termux for errors.',
-      _ => 'Start it in Termux from here. First time? Use "Install in Termux" in Settings.',
+      ServerStatus.checking => app.builtin
+          ? 'Starting the built-in server. The first start unpacks it and can take a minute.'
+          : 'Looking for the server at ${app.baseUrl}.',
+      ServerStatus.needsKey => app.builtin
+          ? 'Open the dashboard (+ in the rail), create your account and add provider keys. '
+              'Then sign in under Settings → Dashboard.'
+          : 'Open the dashboard, copy the unified key from the Keys page, and paste it in Settings.',
+      ServerStatus.error => app.lastError ?? (app.builtin ? 'Open Logs to see what happened.' : 'Check Termux for errors.'),
+      _ => app.builtin
+          ? 'Tap Start. The server runs inside this app, no Termux needed.'
+          : 'Start it in Termux from here. First time? Use "Install in Termux" in Settings.',
     };
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 0, 8, 12),
@@ -609,18 +639,26 @@ class _UserBar extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onStop;
   final VoidCallback onSettings;
-  const _UserBar({required this.app, required this.onStart, required this.onStop, required this.onSettings});
+  final VoidCallback onLogs;
+  const _UserBar({
+    required this.app,
+    required this.onStart,
+    required this.onStop,
+    required this.onSettings,
+    required this.onLogs,
+  });
 
   @override
   Widget build(BuildContext context) {
     final (dot, line) = switch (app.status) {
       ServerStatus.running => (VibeColors.online, 'Running · ${app.readyCount} models ready'),
-      ServerStatus.checking => (VibeColors.idle, 'Connecting…'),
+      ServerStatus.checking => (VibeColors.idle, app.builtin ? 'Starting…' : 'Connecting…'),
       ServerStatus.needsKey => (VibeColors.idle, 'Needs your API key'),
       ServerStatus.error => (VibeColors.danger, 'Error · tap Settings'),
       ServerStatus.stopped => (VibeColors.faint, 'Not running'),
     };
-    final running = app.status == ServerStatus.running;
+    final running = app.status == ServerStatus.running ||
+        (app.builtin && (app.serverState == 'running' || app.serverState == 'preparing'));
     return Container(
       color: VibeColors.card,
       child: SafeArea(
@@ -674,6 +712,12 @@ class _UserBar extends StatelessWidget {
                 icon: Icon(running ? Icons.stop_circle_outlined : Icons.play_circle_outline,
                     color: VibeColors.muted),
               ),
+              if (app.builtin)
+                IconButton(
+                  tooltip: 'Server logs',
+                  onPressed: onLogs,
+                  icon: const Icon(Icons.terminal, color: VibeColors.muted),
+                ),
               IconButton(
                 tooltip: 'Settings',
                 onPressed: onSettings,

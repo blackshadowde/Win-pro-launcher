@@ -1,7 +1,7 @@
 # Vibe AI
 
 A native Android chat app for [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi)
-running in Termux on the same phone, in Vibe's Discord style.
+built into the app (or running in Termux), in Vibe's Discord style.
 
 - **Left rail**: *Auto* at the top (FreeLLMAPI picks the best free model for each message),
   then one avatar per provider that has a working key (Gemini, Groq, Cerebras, …).
@@ -16,16 +16,15 @@ running in Termux on the same phone, in Vibe's Discord style.
 - **Settings → Dashboard**: sign in once (only a 30-day session is kept, not the password);
   the unified API key fills itself in, pick the routing strategy for Auto, check all keys.
 
-## First-time setup
+## First-time setup (built-in server, default)
 
-1. Install **Termux** from F-Droid.
-2. In Termux, paste this once (lets Vibe AI send it commands):
-   ```
-   mkdir -p ~/.termux && echo "allow-external-apps=true" >> ~/.termux/termux.properties && termux-reload-settings
-   ```
-3. In Vibe AI: **Settings → Install FreeLLMAPI in Termux** (allow the permission it asks for).
-4. Tap **Start** in the user bar, open the dashboard (**+** in the rail) and add your provider keys.
-5. In **Settings → Dashboard**, sign in with the dashboard account. The API key fills itself in.
+1. Tap **Start** in the user bar. The first start unpacks FreeLLMAPI (up to a minute);
+   a notification shows while it runs. The terminal icon opens the live **server logs**.
+2. Tap **+** in the rail to open the dashboard: create your account and add provider keys.
+3. **Settings → Dashboard**: sign in with that account. The API key fills itself in.
+4. **Settings → Keep it running → Allow running in the background** (recommended on vivo).
+
+Termux is optional: **Settings → Server → Termux** switches back to running it there.
 
 ## Signing (one time)
 
