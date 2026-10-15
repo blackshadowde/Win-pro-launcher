@@ -116,6 +116,13 @@ object ServerRuntime {
         return codeDir
     }
 
+    private fun portBusy(port: Int): Boolean = try {
+        java.net.Socket().use { it.connect(java.net.InetSocketAddress("127.0.0.1", port), 500) }
+        true
+    } catch (_: Exception) {
+        false
+    }
+
     private fun encryptionKey(dataDir: File): String {
         val file = File(dataDir, "app-encryption.key")
         if (file.exists()) return file.readText().trim()
@@ -132,6 +139,17 @@ object ServerRuntime {
         if (!node.exists()) throw IllegalStateException("Node.js is missing from this build.")
         val dataDir = File(ctx.filesDir, "freellmapi-data").apply { mkdirs() }
 
+        // Something else (often FreeLLMAPI started in Termux) already holds the port.
+        if (portBusy(3001)) {
+            log("Port 3001 is already in use by another app.")
+            log("If FreeLLMAPI is still running in Termux, stop it there (Ctrl+C, or tap Exit in")
+            log("Termux's notification), then start the server here again.")
+            log("Or switch Settings → Server to Termux to keep using that one.")
+            state = "exited"
+            onExit?.invoke()
+            return
+        }
+
         val pb = ProcessBuilder(node.absolutePath, "server/dist/index.js")
             .directory(codeDir)
             .redirectErrorStream(true)
@@ -146,6 +164,8 @@ object ServerRuntime {
             put("HOST", "127.0.0.1")
             put("FREEAPI_DB_PATH", File(dataDir, "freellmapi.db").absolutePath)
             put("CLIENT_DIST", File(codeDir, "client/dist").absolutePath)
+            // The data folder is private to this app, so let the server lock it down.
+            put("FREEAPI_DB_DIR_HARDENING", "1")
         }
 
         log("Starting FreeLLMAPI on http://127.0.0.1:3001 …")
