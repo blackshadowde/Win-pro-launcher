@@ -399,6 +399,15 @@ class _Pane extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(8, 12, 8, 16),
               children: [
                 if (!running) _SetupCard(app: app, onStart: onStart),
+                if (running && !app.signedIn && provider == 'auto')
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(12, 0, 12, 10),
+                    child: Text(
+                      'To see each provider (Groq, OpenRouter…) in the rail, open the dashboard once '
+                      'and log in, or sign in under Settings → Dashboard.',
+                      style: TextStyle(color: VibeColors.faint, fontSize: 13),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: FilledButton.icon(

@@ -41,6 +41,8 @@ class AppState extends ChangeNotifier {
   int _pollCount = 0;
 
   List<ModelInfo> models = const [];
+  /// Models per provider from the dashboard (needs sign-in). Preferred for the rail.
+  List<ModelInfo> providerModels = const [];
   ServerStatus status = ServerStatus.checking;
   String? lastError;
 
@@ -236,8 +238,26 @@ class AppState extends ChangeNotifier {
     await loadDashboard();
   }
 
+  /// Takes over a session made in the in-app dashboard (sign-up or log-in there).
+  Future<void> adoptDashToken(String token) async {
+    if (token.isEmpty || token == dashToken) return;
+    dashToken = token;
+    await _prefs.setString('dashToken', dashToken);
+    try {
+      final key = await dash.unifiedKey();
+      if (key != null && key.isNotEmpty) {
+        apiKey = key;
+        await _prefs.setString('apiKey', apiKey);
+      }
+    } catch (_) {}
+    notifyListeners();
+    await refresh();
+    await loadDashboard();
+  }
+
   Future<void> signOut() async {
     dashToken = '';
+    providerModels = const [];
     dashEmail = '';
     routing = const {};
     keys = const [];
@@ -251,6 +271,9 @@ class AppState extends ChangeNotifier {
     try {
       routing = await dash.routing();
       keys = await dash.keys();
+      try {
+        providerModels = await dash.providerModels();
+      } catch (_) {}
       dashError = null;
     } on ApiException catch (e) {
       dashError = e.message;
@@ -292,6 +315,9 @@ class AppState extends ChangeNotifier {
   /// Providers that have at least one model ready right now, for the rail.
   List<String> get providers {
     final set = <String>{};
+    for (final m in providerModels) {
+      if (m.available) set.add(m.provider);
+    }
     for (final m in models) {
       if (m.available && m.provider != 'freellmapi' && m.provider != 'unknown') set.add(m.provider);
     }
@@ -313,7 +339,8 @@ class AppState extends ChangeNotifier {
       }
       return routers;
     }
-    final list = models.where((m) => m.provider == provider).toList()
+    final fromDash = providerModels.where((m) => m.provider == provider).toList();
+    final list = (fromDash.isNotEmpty ? fromDash : models.where((m) => m.provider == provider).toList())
       ..sort((a, b) {
         if (a.available != b.available) return a.available ? -1 : 1;
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
@@ -332,7 +359,7 @@ class AppState extends ChangeNotifier {
   }
 
   String modelName(String id) {
-    for (final m in models) {
+    for (final m in [...models, ...providerModels]) {
       if (m.id == id) return m.name;
     }
     if (id == 'auto') return 'Auto';

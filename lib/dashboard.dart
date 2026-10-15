@@ -53,7 +53,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Puts the app's dashboard session into the page's storage once, then reloads.
   Future<void> _handOverSession() async {
     final token = widget.app.dashToken;
-    if (_sessionHandedOver || token.isEmpty) return;
+    if (token.isEmpty) {
+      await _pickUpSession();
+      return;
+    }
+    if (_sessionHandedOver) return;
     _sessionHandedOver = true;
     try {
       final has = await _web.runJavaScriptReturningResult(
@@ -65,6 +69,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {
       // Not fatal: you can still sign in on the page itself.
     }
+  }
+
+  /// If you sign up or log in on the page, the app uses that session too.
+  Future<void> _pickUpSession() async {
+    try {
+      final r = await _web.runJavaScriptReturningResult(
+        "localStorage.getItem('freellmapi_dashboard_token') || ''",
+      );
+      var t = r.toString();
+      if (t.startsWith('"') && t.endsWith('"')) t = jsonDecode(t) as String;
+      if (t.isNotEmpty && t != 'null') await widget.app.adoptDashToken(t);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    // The page is a single-page app, so login may not trigger a page load: check once more.
+    if (widget.app.dashToken.isEmpty) _pickUpSession();
+    super.dispose();
   }
 
   @override

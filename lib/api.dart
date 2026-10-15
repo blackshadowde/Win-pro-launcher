@@ -308,6 +308,25 @@ class DashboardApi {
     await _send('PUT', '/api/fallback/routing', body);
   }
 
+  /// Every model per provider. Ids are "platform:model" so a chat stays on that
+  /// provider (newer FreeLLMAPI merges same-named models in /v1/models).
+  Future<List<ModelInfo>> providerModels() async {
+    final j = await _get('/api/models');
+    if (j is! List) return const [];
+    return j.whereType<Map>().where((m) => m['platform'] != null && m['modelId'] != null).map((m) {
+      final platform = m['platform'].toString();
+      final q = m['qualifiedModelId'];
+      final name = m['displayName'];
+      final keys = m['keyCount'];
+      return ModelInfo(
+        id: q is String && q.contains(':') ? q : '$platform:${m['modelId']}',
+        name: name is String && name.isNotEmpty ? name : m['modelId'].toString(),
+        provider: platform,
+        available: m['enabled'] == true && (keys is num ? keys > 0 : true),
+      );
+    }).toList();
+  }
+
   Future<List<KeyHealth>> keys() async {
     final j = await _get('/api/keys');
     if (j is! List) return const [];
