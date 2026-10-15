@@ -22,6 +22,13 @@ class Prefs(context: Context) {
         private set
     var enterDelay by mutableIntStateOf(p.getInt("enterDelay", 0))
         private set
+    var whiteIcons by mutableStateOf(p.getBoolean("whiteIcons", true))
+        private set
+
+    fun setWhiteIconsOn(v: Boolean) {
+        whiteIcons = v
+        p.edit().putBoolean("whiteIcons", v).apply()
+    }
 
     val columns: Int get() = if (moreTiles) 6 else 4
 

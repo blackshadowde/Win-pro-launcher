@@ -5,6 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.Drawable
+import android.os.Build
 import android.os.Process
 import android.os.UserHandle
 import android.provider.MediaStore
@@ -20,6 +25,8 @@ data class AppEntry(
     val component: ComponentName,
     val user: UserHandle,
     val icon: ImageBitmap,
+    /** White single-colour glyph from the app's themed icon, when it has one. */
+    val glyph: ImageBitmap?,
 )
 
 suspend fun loadApps(context: Context): List<AppEntry> = withContext(Dispatchers.Default) {
@@ -28,15 +35,34 @@ suspend fun loadApps(context: Context): List<AppEntry> = withContext(Dispatchers
     launcherApps.getActivityList(null, Process.myUserHandle())
         .filter { it.componentName.packageName != context.packageName }
         .map { info ->
+            val drawable = info.getIcon(dpi)
             AppEntry(
                 key = info.componentName.flattenToShortString(),
                 label = info.label.toString(),
                 component = info.componentName,
                 user = info.user,
-                icon = info.getIcon(dpi).toBitmap(192, 192).asImageBitmap(),
+                icon = drawable.toBitmap(192, 192).asImageBitmap(),
+                glyph = runCatching { whiteGlyph(drawable) }.getOrNull(),
             )
         }
         .sortedBy { it.label.lowercase() }
+}
+
+/**
+ * Android 13+ themed-icon layer, drawn white and cropped to the visible
+ * part of the adaptive icon (the inner 72 of 108 units), so it fills like a normal icon.
+ */
+private fun whiteGlyph(drawable: Drawable): ImageBitmap? {
+    if (Build.VERSION.SDK_INT < 33 || drawable !is AdaptiveIconDrawable) return null
+    val mono = drawable.monochrome?.mutate() ?: return null
+    val size = 192
+    val pad = size / 4 // 108/72 = 1.5x, so half the size again split over both sides
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    mono.setBounds(-pad, -pad, size + pad, size + pad)
+    mono.setTint(android.graphics.Color.WHITE)
+    mono.draw(canvas)
+    return bmp.asImageBitmap()
 }
 
 /** First-run Start: phone, messages, camera, photos, browser, email, music, settings. */

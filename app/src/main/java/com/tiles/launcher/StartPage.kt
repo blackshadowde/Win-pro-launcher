@@ -93,7 +93,7 @@ fun StartPage(
         val order = board.previewOrder().filter { apps.containsKey(it.key) }
         val cells = Grid.pack(order, cols)
         val rows = Grid.rows(order, cells)
-        val topPad = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp
+        val topPad = 12.dp // the solid status bar sits above this page
 
         Box(
             Modifier
@@ -172,7 +172,7 @@ private fun TileView(
     }
 
     // Turnstile.
-    val rot = remember { Animatable(Motion.IN_FROM) }
+    val rot = remember { Animatable(Motion.OUT_ANGLE) }
     val fade = remember { Animatable(0f) }
     var readyEpoch by remember { mutableIntStateOf(-1) }
     LaunchedEffect(state.epoch, state.phase) {
@@ -180,17 +180,18 @@ private fun TileView(
         val d = Motion.stagger(relRow, cell.col)
         when (state.phase) {
             Phase.Hidden -> {
-                rot.snapTo(Motion.IN_FROM)
+                rot.snapTo(Motion.OUT_ANGLE)
                 fade.snapTo(0f)
                 readyEpoch = state.epoch
             }
             Phase.In -> {
                 if (readyEpoch != state.epoch) {
-                    rot.snapTo(Motion.IN_FROM)
+                    rot.snapTo(Motion.OUT_ANGLE)
                     fade.snapTo(0f)
                     readyEpoch = state.epoch
                 }
-                delay(d)
+                // The opening flip played backwards: the tile that opened the app returns first.
+                delay(Motion.reverseStagger(relRow, cell.col, pin.key == state.returnKey))
                 launch { fade.animateTo(1f, tween(Motion.FADE_MS)) }
                 rot.animateTo(0f, tween(Motion.IN_MS, easing = Motion.EnterEasing))
             }
@@ -198,7 +199,7 @@ private fun TileView(
                 val od = if (pin.key == state.launchingKey) Motion.LAST_TILE_DELAY_MS else d
                 delay(od)
                 launch { fade.animateTo(0f, tween(Motion.OUT_MS, easing = Motion.ExitEasing)) }
-                rot.animateTo(Motion.OUT_TO, tween(Motion.OUT_MS, easing = Motion.ExitEasing))
+                rot.animateTo(Motion.OUT_ANGLE, tween(Motion.OUT_MS, easing = Motion.ExitEasing))
             }
         }
     }
@@ -394,7 +395,7 @@ private fun TileView(
 private fun TileFace(pin: Pin, app: AppEntry, pal: Palette) {
     Box(Modifier.fillMaxSize().background(pal.accent)) {
         Image(
-            bitmap = app.icon,
+            bitmap = if (LocalWhiteIcons.current) app.glyph ?: app.icon else app.icon,
             contentDescription = app.label,
             modifier = Modifier
                 .align(Alignment.Center)
@@ -404,7 +405,7 @@ private fun TileFace(pin: Pin, app: AppEntry, pal: Palette) {
         if (pin.size != TileSize.Small) {
             BasicText(
                 text = app.label,
-                style = TextStyle(color = Color.White, fontSize = 13.sp),
+                style = wpStyle(14.sp, Color.White),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier

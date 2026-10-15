@@ -12,11 +12,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -26,18 +25,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun SettingsPage(prefs: Prefs, navMode: String, onClose: () -> Unit) {
+fun SettingsPage(
+    prefs: Prefs,
+    navMode: String,
+    fontCount: Int,
+    onLoadFont: () -> Unit,
+    onResetFont: () -> Unit,
+    onClose: () -> Unit,
+) {
     val pal = LocalPalette.current
     val source = remember { MutableInteractionSource() }
-    val head = TextStyle(color = pal.fg, fontSize = 20.sp, fontWeight = FontWeight.Light)
-    val body = TextStyle(color = pal.fg, fontSize = 17.sp)
-    val note = TextStyle(color = pal.sub, fontSize = 14.sp)
+    val head = wpStyle(20.sp, pal.fg, FontWeight.Light)
+    val body = wpStyle(17.sp, pal.fg)
+    val note = wpStyle(14.sp, pal.sub)
 
     BackHandler(onBack = onClose)
 
@@ -47,11 +53,11 @@ fun SettingsPage(prefs: Prefs, navMode: String, onClose: () -> Unit) {
             .background(pal.bg)
             .clickable(interactionSource = source, indication = null) {}
             .verticalScroll(rememberScrollState())
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
     ) {
-        BasicText("SETTINGS", style = TextStyle(color = pal.fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
-        BasicText("start+theme", style = TextStyle(color = pal.fg, fontSize = 48.sp, fontWeight = FontWeight.Light))
+        BasicText("SETTINGS", style = wpStyle(14.sp, pal.fg, FontWeight.SemiBold))
+        BasicText("start+theme", style = wpStyle(48.sp, pal.fg, FontWeight.Light))
         Spacer(Modifier.height(20.dp))
 
         BasicText("Background", style = head)
@@ -84,6 +90,36 @@ fun SettingsPage(prefs: Prefs, navMode: String, onClose: () -> Unit) {
 
         BasicText("Show more tiles", style = head)
         Toggle(prefs.moreTiles, pal) { prefs.setMoreTilesOn(it) }
+        Spacer(Modifier.height(12.dp))
+
+        BasicText("White tile icons", style = head)
+        BasicText("Uses each app's themed icon where it has one.", style = note)
+        Toggle(prefs.whiteIcons, pal) { prefs.setWhiteIconsOn(it) }
+        Spacer(Modifier.height(20.dp))
+
+        BasicText("Font", style = head)
+        BasicText(
+            if (fontCount > 0) "using your font files ($fontCount weight${if (fontCount == 1) "" else "s"})"
+            else "using the system font",
+            style = note,
+        )
+        BasicText(
+            "load font files (.ttf / .otf)",
+            style = body,
+            modifier = Modifier.clickable { onLoadFont() }.padding(vertical = 8.dp),
+        )
+        BasicText(
+            "Pick all weights at once, e.g. segoewp.ttf, segoewp-light.ttf, segoewp-semibold.ttf. " +
+                "The weight is read from the file name.",
+            style = note,
+        )
+        if (fontCount > 0) {
+            BasicText(
+                "go back to the system font",
+                style = body,
+                modifier = Modifier.clickable { onResetFont() }.padding(vertical = 8.dp),
+            )
+        }
         Spacer(Modifier.height(20.dp))
 
         BasicText("Return-home animation", style = head)
@@ -99,6 +135,7 @@ fun SettingsPage(prefs: Prefs, navMode: String, onClose: () -> Unit) {
         )
         BasicText("navigation: $navMode", style = note)
         BasicText(Diag.summary, style = note, modifier = Modifier.padding(top = 4.dp))
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -106,7 +143,7 @@ fun SettingsPage(prefs: Prefs, navMode: String, onClose: () -> Unit) {
 private fun Choice(text: String, on: Boolean, pal: Palette, onClick: () -> Unit) {
     BasicText(
         text = text,
-        style = TextStyle(color = if (on) androidx.compose.ui.graphics.Color.White else pal.fg, fontSize = 17.sp),
+        style = wpStyle(17.sp, if (on) Color.White else pal.fg),
         modifier = Modifier
             .background(if (on) pal.accent else pal.chrome)
             .clickable(onClick = onClick)
@@ -120,7 +157,7 @@ private fun Toggle(on: Boolean, pal: Palette, onChange: (Boolean) -> Unit) {
         Modifier.clickable { onChange(!on) }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText(if (on) "On" else "Off", style = TextStyle(color = pal.fg, fontSize = 17.sp), modifier = Modifier.width(48.dp))
+        BasicText(if (on) "On" else "Off", style = wpStyle(17.sp, pal.fg), modifier = Modifier.width(48.dp))
         Box(
             Modifier
                 .size(width = 64.dp, height = 26.dp)

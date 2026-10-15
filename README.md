@@ -17,6 +17,19 @@ Private Windows Phone 8.1–style launcher for Android (Kotlin + Jetpack Compose
 - **Turnstile**: tiles swing out when opening an app (tapped tile last) and swing in on
   return home. The swing-in now waits for the system's own home animation to finish.
 
+## Phase 2 (current)
+
+- **Return home = the opening flip in reverse**: tiles flip back in from the side they
+  left, the tile that opened the app first, the rest in reverse order.
+- **App list turnstile**: rows swing out when you open an app (tapped row last) and
+  swing back in when you come back to the list.
+- **Solid status bar**: tiles and lists start below it and never scroll under it.
+- **White tile icons**: uses each app's Android 13+ themed icon where available
+  (toggle in start + theme).
+- **Font**: start + theme → *load font files*. Pick your own Segoe WP `.ttf` files
+  (all weights at once); the weight is read from the file name. Font files stay on the
+  phone and are never committed to this repo.
+
 ## Return-home animation tuning
 
 In **start + theme → Return-home animation**:

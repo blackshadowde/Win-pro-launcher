@@ -14,7 +14,15 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.text.font.FontFamily
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -29,6 +37,17 @@ class MainActivity : ComponentActivity() {
     private var enterJob: Job? = null
     private var fallbackJob: Job? = null
     private val launcherApps by lazy { getSystemService(LauncherApps::class.java) }
+
+    private var font by mutableStateOf<FontFamily>(FontFamily.Default)
+    private var fontCount by mutableIntStateOf(0)
+
+    private val pickFonts = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNullOrEmpty()) return@registerForActivityResult
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) { FontStore.import(this@MainActivity, uris) }
+            reloadFont()
+        }
+    }
 
     private val appsCallback = object : LauncherApps.Callback() {
         override fun onPackageRemoved(packageName: String?, user: UserHandle?) { state.appsVersion++ }
@@ -56,15 +75,23 @@ class MainActivity : ComponentActivity() {
         })
 
         launcherApps.registerCallback(appsCallback)
+        reloadFont()
 
         setContent {
             LauncherRoot(
                 state = state,
                 board = board,
                 prefs = prefs,
+                font = font,
+                fontCount = fontCount,
                 onLaunchTile = ::launchTile,
                 onLaunchApp = ::launchApp,
                 onUninstall = ::uninstall,
+                onLoadFont = { pickFonts.launch(arrayOf("*/*")) },
+                onResetFont = {
+                    FontStore.clear(this)
+                    reloadFont()
+                },
             )
         }
     }
@@ -129,7 +156,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // Home while on Start scrolls up; home from an app lands on the top of Start.
-        if (isResumedNow) state.homeRequests++ else state.snapHomeRequests++
+        if (isResumedNow) {
+            state.homeRequests++
+        } else {
+            state.resetList()
+            state.snapHomeRequests++
+        }
     }
 
     private fun maybeEnter(source: Trigger) {
@@ -176,8 +208,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun launchApp(app: AppEntry) {
-        runCatching { launcherApps.startMainActivity(app.component, app.user, null, null) }
+    /** From the app list: rows turnstile out (tapped row last), then the app opens. */
+    private fun launchApp(app: AppEntry, bounds: Rect) {
+        if (state.listPhase == ListPhase.Out) return
+        lifecycleScope.launch {
+            state.beginListLaunch(app.key)
+            delay(Motion.OUT_TOTAL_MS)
+            val opts = ActivityOptions.makeScaleUpAnimation(
+                window.decorView, bounds.left, bounds.top, bounds.width(), bounds.height(),
+            )
+            val ok = runCatching {
+                launcherApps.startMainActivity(app.component, app.user, bounds, opts.toBundle())
+            }.isSuccess
+            if (!ok) {
+                state.resetList()
+                return@launch
+            }
+            delay(1500)
+            if (isResumedNow && state.listPhase == ListPhase.Out) state.resetList()
+        }
+    }
+
+    private fun reloadFont() {
+        font = FontStore.family(this) ?: FontFamily.Default
+        fontCount = FontStore.count(this)
     }
 
     private fun uninstall(app: AppEntry) {

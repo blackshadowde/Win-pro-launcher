@@ -8,6 +8,8 @@ import androidx.compose.runtime.setValue
 
 enum class Phase { Hidden, In, Out }
 
+enum class ListPhase { Idle, Out, In }
+
 /** Which moment starts the swing-in after returning home. */
 enum class Trigger(val label: String) {
     OnEnterAnim("after system animation"),
@@ -21,8 +23,15 @@ class StartState {
     /** Bumped every time Start is left; tiles stay invisible until they reset for the new epoch. */
     var epoch by mutableIntStateOf(0)
     var launchingKey by mutableStateOf<String?>(null)
+    /** Tile that opened the last app: first to flip back in. */
+    var returnKey by mutableStateOf<String?>(null)
     var navMode by mutableStateOf("unknown")
     var blockedUntil = 0L
+
+    // App list turnstile.
+    var listPhase by mutableStateOf(ListPhase.Idle)
+    var listEpoch by mutableIntStateOf(0)
+    var listLaunchingKey by mutableStateOf<String?>(null)
 
     /** Home pressed while already on Start: animate to the top. */
     var homeRequests by mutableIntStateOf(0)
@@ -42,10 +51,29 @@ class StartState {
             phase = Phase.In
             blockedUntil = SystemClock.uptimeMillis() + Motion.TAP_GRACE_MS
         }
+        if (listPhase == ListPhase.Out) {
+            listPhase = ListPhase.In
+            listEpoch++
+        }
     }
 
     fun beginLaunch(key: String) {
         launchingKey = key
+        returnKey = key
         phase = Phase.Out
+    }
+
+    fun beginListLaunch(key: String) {
+        returnKey = null
+        listLaunchingKey = key
+        listPhase = ListPhase.Out
+        listEpoch++
+    }
+
+    fun resetList() {
+        if (listPhase != ListPhase.Idle) {
+            listPhase = ListPhase.Idle
+            listEpoch++
+        }
     }
 }

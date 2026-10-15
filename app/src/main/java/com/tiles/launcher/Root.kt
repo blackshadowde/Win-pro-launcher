@@ -4,7 +4,12 @@ import android.graphics.Rect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -18,7 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.launch
 
 @Composable
@@ -26,9 +33,13 @@ fun LauncherRoot(
     state: StartState,
     board: Board,
     prefs: Prefs,
+    font: FontFamily,
+    fontCount: Int,
     onLaunchTile: (AppEntry, Rect) -> Unit,
-    onLaunchApp: (AppEntry) -> Unit,
+    onLaunchApp: (AppEntry, Rect) -> Unit,
     onUninstall: (AppEntry) -> Unit,
+    onLoadFont: () -> Unit,
+    onResetFont: () -> Unit,
 ) {
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
@@ -43,7 +54,11 @@ fun LauncherRoot(
     val byKey = remember(apps) { apps.associateBy { it.key } }
     val pal = paletteFor(prefs.dark, prefs.accent)
 
-    CompositionLocalProvider(LocalPalette provides pal) {
+    CompositionLocalProvider(
+        LocalPalette provides pal,
+        LocalFont provides font,
+        LocalWhiteIcons provides prefs.whiteIcons,
+    ) {
         val pager = rememberPagerState(pageCount = { 2 })
         val startScroll = rememberScrollState()
         val listState = rememberLazyListState()
@@ -64,39 +79,62 @@ fun LauncherRoot(
             if (state.snapHomeRequests == 0) return@LaunchedEffect
             settingsOpen = false
             board.exitEdit()
+            state.resetList()
             pager.scrollToPage(0)
             startScroll.scrollTo(0)
         }
 
-        Box(Modifier.fillMaxSize().background(pal.bg)) {
-            HorizontalPager(
-                state = pager,
-                modifier = Modifier.fillMaxSize(),
-                userScrollEnabled = !board.editing,
-                beyondViewportPageCount = 1,
-            ) { page ->
-                if (page == 0) {
-                    StartPage(
-                        state = state,
-                        board = board,
-                        apps = byKey,
-                        scroll = startScroll,
-                        onLaunchTile = onLaunchTile,
-                        onOpenAppList = { scope.launch { pager.animateScrollToPage(1) } },
-                    )
-                } else {
-                    AppListPage(
-                        apps = apps,
-                        board = board,
-                        listState = listState,
-                        onLaunch = onLaunchApp,
-                        onUninstall = onUninstall,
-                        onOpenSettings = { settingsOpen = true },
+        Column(Modifier.fillMaxSize().background(pal.bg)) {
+            // Solid status bar, like Windows Phone: content never scrolls under it.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsTopHeight(WindowInsets.statusBars)
+                    .background(pal.bg)
+            )
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clipToBounds()
+            ) {
+                HorizontalPager(
+                    state = pager,
+                    modifier = Modifier.fillMaxSize(),
+                    userScrollEnabled = !board.editing,
+                    beyondViewportPageCount = 1,
+                ) { page ->
+                    if (page == 0) {
+                        StartPage(
+                            state = state,
+                            board = board,
+                            apps = byKey,
+                            scroll = startScroll,
+                            onLaunchTile = onLaunchTile,
+                            onOpenAppList = { scope.launch { pager.animateScrollToPage(1) } },
+                        )
+                    } else {
+                        AppListPage(
+                            apps = apps,
+                            board = board,
+                            state = state,
+                            listState = listState,
+                            onLaunch = onLaunchApp,
+                            onUninstall = onUninstall,
+                            onOpenSettings = { settingsOpen = true },
+                        )
+                    }
+                }
+                if (settingsOpen) {
+                    SettingsPage(
+                        prefs = prefs,
+                        navMode = state.navMode,
+                        fontCount = fontCount,
+                        onLoadFont = onLoadFont,
+                        onResetFont = onResetFont,
+                        onClose = { settingsOpen = false },
                     )
                 }
-            }
-            if (settingsOpen) {
-                SettingsPage(prefs = prefs, navMode = state.navMode, onClose = { settingsOpen = false })
             }
         }
     }
